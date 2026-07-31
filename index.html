@@ -313,16 +313,17 @@
     }
     .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--purple), var(--indigo)); transition: width .3s; }
 
-    /* Mood */
-    .mood-options { display: flex; justify-content: space-around; gap: 10px; flex-wrap: wrap; }
-    .mood-option {
-      width: 64px; height: 64px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 32px; cursor: pointer; background: var(--surface-solid);
-      border: 2px solid var(--border); transition: all .2s;
-    }
-    .mood-option:hover { transform: scale(1.1); }
-    .mood-option.selected { border-color: var(--purple); background: rgba(175,82,222,0.12); }
+    /* Diary */
+    .diary-mood { font-size: 24px; cursor: pointer; padding: 4px 6px; border-radius: 50%; border: 2px solid transparent; transition: all .15s; }
+    .diary-mood:hover { transform: scale(1.1); }
+    .diary-mood.selected { border-color: var(--purple); background: rgba(175,82,222,0.12); }
+    .diary-item { padding: 14px; margin-bottom: 10px; background: var(--surface-solid); border-radius: 12px; border: 1px solid var(--border); cursor: pointer; transition: all .15s; }
+    .diary-item:hover { border-color: var(--purple); }
+    .diary-item-head { display: flex; align-items: center; gap: 8px; }
+    .diary-date { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+    .diary-mood-mini { font-size: 16px; }
+    .diary-title { font-weight: 600; flex: 1; }
+    .diary-snippet { font-size: 13px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; white-space: pre-wrap; }
 
     /* English cards */
     .word-card {
@@ -524,7 +525,7 @@
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="brand-dot"></div>人生管理系统</div>
-      <nav id="nav">
+      <nav class="nav" id="nav">
         <div class="nav-group-title">核心</div>
         <div class="nav-item active" data-section="overview" onclick="showSection('overview')"><span class="nav-icon">🏠</span>总览</div>
         <div class="nav-item" data-section="plan" onclick="showSection('plan')"><span class="nav-icon">☑️</span>每日计划</div>
@@ -533,7 +534,7 @@
         <div class="nav-item" data-section="diet" onclick="showSection('diet')"><span class="nav-icon">🍎</span>饮食记录</div>
         <div class="nav-item" data-section="exercise" onclick="showSection('exercise')"><span class="nav-icon">🏃</span>运动打卡</div>
         <div class="nav-item" data-section="finance" onclick="showSection('finance')"><span class="nav-icon">💰</span>记账存钱</div>
-        <div class="nav-item" data-section="mood" onclick="showSection('mood')"><span class="nav-icon">😊</span>心情记录</div>
+        <div class="nav-item" data-section="diary" onclick="showSection('diary')"><span class="nav-icon">📔</span>日记</div>
 
         <div class="nav-group-title">成长积累</div>
         <div class="nav-item" data-section="books" onclick="showSection('books')"><span class="nav-icon">📚</span>读书收获</div>
@@ -603,7 +604,6 @@
               <button class="quick-btn" onclick="showSection('finance')">💰 记一笔</button>
               <button class="quick-btn" onclick="showSection('diet')">🍎 记一餐</button>
               <button class="quick-btn" onclick="showSection('exercise')">🏃 记运动</button>
-              <button class="quick-btn" onclick="showSection('mood')">😊 记心情</button>
             </div>
           </div>
         </div>
@@ -890,26 +890,33 @@
         </div>
       </section>
 
-      <!-- 6. 心情记录 -->
-      <section class="section" id="sec-mood">
+      <!-- 日记 -->
+      <section class="section" id="sec-diary">
         <div class="grid-2">
           <div class="card">
-            <div class="card-title">😊 今天心情如何</div>
-            <div class="mood-options" id="moodOptions">
-              <div class="mood-option" data-mood="5" onclick="selectMood(this)">😄</div>
-              <div class="mood-option" data-mood="4" onclick="selectMood(this)">🙂</div>
-              <div class="mood-option" data-mood="3" onclick="selectMood(this)">😐</div>
-              <div class="mood-option" data-mood="2" onclick="selectMood(this)">😕</div>
-              <div class="mood-option" data-mood="1" onclick="selectMood(this)">😢</div>
-              <div class="mood-option" data-mood="0" onclick="selectMood(this)">😫</div>
+            <div class="card-title">📔 写日记</div>
+            <div style="display:flex;gap:10px;">
+              <input class="input" id="diaryDate" type="date" style="max-width:170px;">
+              <input class="input" id="diaryTitle" type="text" placeholder="标题（可选）" style="flex:1;">
             </div>
-            <textarea class="input" id="moodDiary" rows="5" placeholder="写点什么..." style="margin-top:16px;"></textarea>
-            <button class="btn" style="margin-top:12px;" onclick="saveMood()">记录心情</button>
-            <div id="moodList" style="margin-top:16px;"></div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="color:var(--text-secondary);font-size:13px;margin-right:4px;">心情</span>
+              <span class="diary-mood" data-m="" onclick="selectDiaryMood(this)">😐</span>
+              <span class="diary-mood" data-m="😄" onclick="selectDiaryMood(this)">😄</span>
+              <span class="diary-mood" data-m="🙂" onclick="selectDiaryMood(this)">🙂</span>
+              <span class="diary-mood" data-m="😕" onclick="selectDiaryMood(this)">😕</span>
+              <span class="diary-mood" data-m="😢" onclick="selectDiaryMood(this)">😢</span>
+            </div>
+            <textarea class="input" id="diaryContent" rows="12" placeholder="今天发生了什么？可直接粘贴你写好的日记…" style="margin-top:12px;"></textarea>
+            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn" onclick="saveDiary()">保存日记</button>
+              <button class="btn btn-blue" onclick="importDiary()">从 Obsidian 导入</button>
+            </div>
+            <div id="diaryMsg" style="margin-top:10px;font-size:13px;min-height:18px;"></div>
           </div>
           <div class="card">
-            <div class="card-title">📈 本周心情趋势</div>
-            <canvas id="moodChart" height="250"></canvas>
+            <div class="card-title">📚 日记时间线</div>
+            <div id="diaryList" style="max-height:560px;overflow-y:auto;"></div>
           </div>
         </div>
       </section>
@@ -1112,7 +1119,6 @@
       exercise: { logs: [] },
       finance: { records: [] },
       books: [],
-      mood: { logs: [] },
       english: { words: [], dailyGoal: 20 },
       projects: [],
       resources: [],
@@ -1440,38 +1446,71 @@
       </div>`).join('') : '<div class="empty-state" style="padding:10px;">暂无笔记</div>';
     }
 
-    // Mood
-    let selectedMoodVal = null;
-    function selectMood(el) {
-      document.querySelectorAll('.mood-option').forEach(m => m.classList.remove('selected'));
+    // Diary
+    let selectedDiaryMood = '';
+    let editingDiaryId = null;
+    function apiPost(url, body) {
+      return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+    }
+    function selectDiaryMood(el) {
+      document.querySelectorAll('.diary-mood').forEach(m => m.classList.remove('selected'));
       el.classList.add('selected');
-      selectedMoodVal = parseInt(el.dataset.mood);
+      selectedDiaryMood = el.dataset.m;
     }
-    function saveMood() {
-      if (selectedMoodVal === null) { alert('先选一个心情 emoji 吧'); return; }
-      const text = document.getElementById('moodDiary').value.trim();
-      data.mood.logs.push({ id: Date.now(), date: todayStr(), mood: selectedMoodVal, text });
-      document.getElementById('moodDiary').value = '';
-      document.querySelectorAll('.mood-option').forEach(m => m.classList.remove('selected'));
-      selectedMoodVal = null;
-      saveData();
+    function showDiaryMsg(text, isErr) {
+      const el = document.getElementById('diaryMsg');
+      if (!el) return;
+      el.textContent = text;
+      el.style.color = isErr ? 'var(--pink)' : 'var(--green)';
     }
-    function renderMood() {
-      const list = document.getElementById('moodList');
-      const recent = data.mood.logs.slice().reverse().slice(0, 7);
-      const moods = ['😫','😢','😕','😐','🙂','😄'];
-      list.innerHTML = recent.length ? recent.map(m => `<div class="record-item"><span>${moods[m.mood]} ${moods[m.mood]} · ${escapeHtml(m.text || '无日记')}</span><span style="color:var(--text-secondary);font-size:13px;">${m.date}</span></div>`).join('') : '<div class="empty-state" style="padding:20px;">暂无心情记录</div>';
-
-      const dates = [];
-      for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); dates.push(dateKey(d)); }
-      const values = dates.map(d => { const l = data.mood.logs.filter(x => x.date === d); return l.length ? l.reduce((s,x) => s + x.mood, 0) / l.length : null; });
-      const ctx = document.getElementById('moodChart').getContext('2d');
-      if (charts.mood) charts.mood.destroy();
-      charts.mood = new Chart(ctx, {
-        type: 'line',
-        data: { labels: dates.map(d => d.slice(5)), datasets: [{ label: '心情指数', data: values, borderColor: data.theme.colors.purple, backgroundColor: data.theme.colors.purple + '20', fill: true, tension: 0.4, pointRadius: 5, spanGaps: true }] },
-        options: { responsive: true, scales: { y: { min: 0, max: 5, ticks: { stepSize: 1, callback: v => moods[v] || '' }, grid: { color: 'rgba(128,128,128,0.1)' } }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } }
+    function saveDiary() {
+      const date = document.getElementById('diaryDate').value || todayStr();
+      const title = document.getElementById('diaryTitle').value.trim();
+      const content = document.getElementById('diaryContent').value.trim();
+      if (!content) { alert('日记内容不能为空'); return; }
+      const fields = { date, title, content, mood: selectedDiaryMood };
+      const after = (r) => {
+        if (!r.ok) { showDiaryMsg('保存失败：' + (r.error || ''), true); return; }
+        loadData().then(() => {
+          renderDiary();
+          showDiaryMsg(editingDiaryId ? '已更新 ✓' : '已保存 ✓');
+          editingDiaryId = null;
+          document.getElementById('diaryContent').value = '';
+          document.getElementById('diaryTitle').value = '';
+          selectedDiaryMood = '';
+          document.querySelectorAll('.diary-mood').forEach(m => m.classList.remove('selected'));
+        });
+      };
+      if (editingDiaryId) apiPost('/api/update', { table: 'diary', id: editingDiaryId, fields }).then(after);
+      else apiPost('/api/insert', { table: 'diary', fields: { ...fields, created_at: new Date().toISOString() } }).then(after);
+    }
+    function importDiary() {
+      showDiaryMsg('导入中…');
+      apiPost('/api/import-diary', {}).then(r => {
+        if (r.ok) { loadData().then(() => { renderDiary(); showDiaryMsg('已从 Obsidian 导入 ' + r.inserted + ' 篇 ✓'); }); }
+        else showDiaryMsg('导入失败：' + (r.error || ''), true);
       });
+    }
+    function renderDiary() {
+      const list = document.getElementById('diaryList');
+      if (!list) return;
+      const items = data.diary || [];
+      list.innerHTML = items.length ? items.map(d => `
+        <div class="diary-item" onclick="editDiary(${d.id})">
+          <div class="diary-item-head"><span class="diary-date">${escapeHtml(d.date)}</span>${d.mood ? `<span class="diary-mood-mini">${d.mood}</span>` : ''}<span class="diary-title">${escapeHtml(d.title || '无标题')}</span></div>
+          <div class="diary-snippet">${escapeHtml((d.content || '').slice(0, 90))}${(d.content || '').length > 90 ? '…' : ''}</div>
+        </div>`).join('') : '<div class="empty-state" style="padding:20px;">还没有日记，写第一篇吧</div>';
+    }
+    function editDiary(id) {
+      const d = (data.diary || []).find(x => x.id === id);
+      if (!d) return;
+      editingDiaryId = id;
+      document.getElementById('diaryDate').value = d.date || todayStr();
+      document.getElementById('diaryTitle').value = d.title || '';
+      document.getElementById('diaryContent').value = d.content || '';
+      selectedDiaryMood = d.mood || '';
+      document.querySelectorAll('.diary-mood').forEach(m => m.classList.toggle('selected', m.dataset.m === selectedDiaryMood && !!selectedDiaryMood));
+      showDiaryMsg('正在编辑该篇，修改后点「保存日记」即更新');
     }
 
     // English
@@ -1547,16 +1586,6 @@
         data.exercise.logs.push({ id: Date.now(), date: todayStr(), type, min, cal: Math.round(min * (type === '跑步' ? 10 : type === '跳绳' ? 11 : type === '游泳' ? 12 : type === '健身' ? 8 : 5)) });
         return { ok: true, module: '运动打卡' };
       }
-      if (text.includes('心情') || text.match(/[😄🙂😐😕😢😫]/)) {
-        const moods = ['😫','😢','😕','😐','🙂','😄'];
-        let mood = 3;
-        if (text.includes('不错') || text.includes('开心') || text.includes('高兴')) mood = 4;
-        if (text.includes('超') || text.includes('棒') || text.includes('很好')) mood = 5;
-        if (text.includes('差') || text.includes('难过') || text.includes('累')) mood = 2;
-        if (text.includes('糟') || text.includes('崩溃')) mood = 0;
-        data.mood.logs.push({ id: Date.now(), date: todayStr(), mood, text });
-        return { ok: true, module: '心情记录' };
-      }
       if ((m = text.match(/吃[了掉]\s*(.+?)(\d+)\s*[卡千]?卡/)) || (m = text.match(/(.+?)(\d+)\s*[卡千]?卡/))) {
         data.diet.logs.push({ id: Date.now(), date: todayStr(), meal: '加餐', name: m[1].trim() || '食物', cal: parseInt(m[2]) });
         return { ok: true, module: '饮食记录' };
@@ -1594,14 +1623,12 @@
       const finExp = data.finance.records.filter(r => r.type === 'expense' && dates.includes(r.date)).reduce((s,r) => s + r.amount, 0);
       const finInc = data.finance.records.filter(r => r.type === 'income' && dates.includes(r.date)).reduce((s,r) => s + r.amount, 0);
       const words = data.english.words.filter(w => dates.includes(w.date)).length;
-      const avgMood = (() => { const logs = data.mood.logs.filter(l => dates.includes(l.date)); return logs.length ? (logs.reduce((s,l) => s + l.mood, 0) / logs.length).toFixed(1) : '-'; })();
       const insights = [];
       if (exMins >= 150) insights.push('本周运动量达标，继续保持！');
       else if (exMins < 60) insights.push('本周运动偏少，建议每天安排 20 分钟活动。');
       if (dietCal > data.diet.goal * 7 * 1.1) insights.push('本周总摄入略高，注意控制餐量。');
       if (finExp > finInc && finInc > 0) insights.push('本周支出超过收入，建议审视非必要开销。');
       if (words >= data.english.dailyGoal * 7) insights.push('英语学习进度很棒，超额完成周目标！');
-      if (avgMood !== '-' && parseFloat(avgMood) >= 4) insights.push('本周心情整体不错，多记录下开心时刻。');
       if (!insights.length) insights.push('本周数据平稳，建议给生活加点小目标。');
       document.getElementById('weeklyContent').innerHTML = `
         <div class="grid-3" style="margin-bottom:20px;">
@@ -1648,7 +1675,7 @@
     function csvModuleMap() {
       return {
         todos: '待办', diet_logs: '饮食', exercises: '运动', finances: '记账',
-        books: '读书', book_notes: '读书笔记', moods: '心情', english_words: '英语单词'
+        books: '读书', book_notes: '读书笔记', english_words: '英语单词'
       };
     }
     function renderCsvButtons() {
@@ -1693,7 +1720,6 @@
         finances: { from: data.finance?.records || [], header: ['ID','日期','类型','类别','金额','备注'], row: r => [r.id, r.date, r.type, r.category, r.amount, r.note] },
         books: { from: data.books || [], header: ['ID','书名','作者','页数','已读'], row: b => [b.id, b.title, b.author, b.pages, b.read] },
         book_notes: { from: (data.books || []).flatMap(b => (b.notes || []).map(n => ({ ...n, book_id: b.id }))), header: ['ID','书ID','日期','笔记'], row: n => [n.id, n.book_id, n.date, n.text] },
-        moods: { from: data.mood?.logs || [], header: ['ID','日期','心情分','内容'], row: l => [l.id, l.date, l.mood, l.text] },
         english_words: { from: data.english?.words || [], header: ['ID','单词','释义','日期','复习次数'], row: w => [w.id, w.word, w.meaning, w.date, w.review] },
       };
       const m = map[table];
@@ -1870,7 +1896,7 @@
     }
     function renderAll() {
       renderOverview();
-      renderTodos(); renderDiet(); renderExercise(); renderFinance(); renderBooks(); renderMood(); renderEnglish();
+      renderTodos(); renderDiet(); renderExercise(); renderFinance(); renderBooks(); renderDiary(); renderEnglish();
       renderRecipes(); renderPriceItems(); renderProjects(); renderResources(); renderCook(); renderProfile(); renderHelp(); renderWishlist();
     }
 
@@ -2014,17 +2040,12 @@
       const finRecords = d.finance.records || [];
       const expToday = sum(finRecords.filter(r => r.date === today && r.type === 'expense'), r => Number(r.amount) || 0);
 
-      const moodLogs = d.mood.logs || [];
-      const todayMood = moodLogs.filter(m => m.date === today).slice(-1)[0];
-      const moodVal = todayMood ? todayMood.mood : (moodLogs.slice(-1)[0] ? moodLogs.slice(-1)[0].mood : null);
-
       // 今日概览：一行关键数字
       const stats = [
         { label: '待办', val: todoTotal ? (todoDone + '/' + todoTotal) : '0/0', sub: '完成/总数' },
         { label: '今日支出', val: '¥' + (Math.round(expToday * 10) / 10), sub: '记账' },
         { label: '今日摄入', val: dietToday + '', sub: 'kcal' },
-        { label: '今日运动', val: exTodayMin + '', sub: '分钟' },
-        { label: '今日心情', val: moodVal != null ? (moodVal + '/5') : '—', sub: '心情' }
+        { label: '今日运动', val: exTodayMin + '', sub: '分钟' }
       ];
       const ts = document.getElementById('todayStats');
       if (ts) ts.innerHTML = stats.map(s => `
@@ -2053,7 +2074,6 @@
         { sec: 'diet', icon: '🍎', title: '饮食记录' },
         { sec: 'exercise', icon: '🏃', title: '运动打卡' },
         { sec: 'finance', icon: '💰', title: '记账存钱' },
-        { sec: 'mood', icon: '😊', title: '心情记录' },
         { sec: 'books', icon: '📚', title: '读书收获' }
       ];
       const mg = document.getElementById('moduleGrid');
@@ -2095,7 +2115,7 @@
       document.getElementById('greeting').textContent = (h < 11 ? '早上好' : h < 14 ? '中午好' : h < 19 ? '下午好' : '晚上好') + '，我';
       document.getElementById('dateText').textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
       renderAll();
-      const empty = !data.todos.length && !data.books.length && !data.projects.length && !data.resources.length && !(data.diet.recipes || []).length && !(data.finance.priceItems || []).length && !data.mood.logs.length;
+      const empty = !data.todos.length && !data.books.length && !data.projects.length && !data.resources.length && !(data.diet.recipes || []).length && !(data.finance.priceItems || []).length;
       if (!empty) {
         const b = document.getElementById('importObsidianBtn');
         if (b) { b.disabled = true; document.getElementById('importObsidianHint').textContent = '当前库已有数据，导入按钮已禁用（避免覆盖）'; }

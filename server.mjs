@@ -34,7 +34,6 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS price_items (id INTEGER PRIMARY KEY, kind TEXT, name TEXT, category TEXT, unit TEXT, price REAL, unit_price REAL, date TEXT, shop TEXT, note TEXT, status TEXT);
   CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY, title TEXT, author TEXT, pages INTEGER, read INTEGER, intro TEXT, content TEXT);
   CREATE TABLE IF NOT EXISTS book_notes (id INTEGER PRIMARY KEY, book_id INTEGER, date TEXT, text TEXT);
-  CREATE TABLE IF NOT EXISTS moods (id INTEGER PRIMARY KEY, date TEXT, mood INTEGER, text TEXT);
   CREATE TABLE IF NOT EXISTS english_words (id INTEGER PRIMARY KEY, word TEXT, meaning TEXT, date TEXT, review INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY, title TEXT, type TEXT, source TEXT, content TEXT, done INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS resources (id INTEGER PRIMARY KEY, title TEXT, source TEXT, summary TEXT);
@@ -47,6 +46,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS help_docs (id INTEGER PRIMARY KEY, content TEXT);
   CREATE TABLE IF NOT EXISTS wishlist (id INTEGER PRIMARY KEY, name TEXT, required_stars REAL, done INTEGER DEFAULT 0, note TEXT);
   CREATE TABLE IF NOT EXISTS taskboard (id INTEGER PRIMARY KEY, grp TEXT, text TEXT, depth INTEGER DEFAULT 0, done INTEGER DEFAULT 0, points INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS diary (id INTEGER PRIMARY KEY, date TEXT, title TEXT, content TEXT, mood TEXT, created_at TEXT);
 `);
 
 const getSetting = (k, d) => {
@@ -100,8 +100,6 @@ function readData() {
     notes: db.prepare('SELECT id,date,text FROM book_notes WHERE book_id=?').all(b.id)
       .map(n => ({ id: n.id, date: n.date, text: n.text }))
   }));
-  const moods = db.prepare('SELECT id,date,mood,text FROM moods').all()
-    .map(r => ({ id: r.id, date: r.date, mood: r.mood, text: r.text }));
   const words = db.prepare('SELECT id,word,meaning,date,review FROM english_words').all()
     .map(r => ({ id: r.id, word: r.word, meaning: r.meaning, date: r.date, review: r.review }));
   const projects = db.prepare('SELECT id,title,type,source,content,done FROM projects').all()
@@ -118,6 +116,9 @@ function readData() {
 
   const taskboard = db.prepare('SELECT id,grp,text,depth,done,points FROM taskboard ORDER BY id').all()
     .map(r => ({ id: r.id, grp: r.grp, text: r.text, depth: r.depth, done: !!r.done, points: r.points }));
+
+  const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
+    .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
 
   const pRow = db.prepare('SELECT willpower,starwish,contract,level,skills,realms FROM player_stats WHERE id=1').get();
   const player = pRow ? {
@@ -136,7 +137,6 @@ function readData() {
     exercise: { logs: exercises },
     finance: { records: fin, priceItems },
     books,
-    mood: { logs: moods },
     english: { words, dailyGoal: enGoal },
     projects,
     resources,
@@ -145,6 +145,7 @@ function readData() {
     wishlist,
     player,
     taskboard,
+    diary,
     theme
   };
 }
@@ -152,7 +153,7 @@ function readData() {
 function writeData(obj) {
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM moods; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM settings;');
+    db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM settings;');
     const insTodo = db.prepare('INSERT INTO todos (id,text,priority,done) VALUES (?,?,?,?)');
     (obj.todos || []).forEach(t => insTodo.run(t.id, t.text, t.priority, t.done ? 1 : 0));
     const insDiet = db.prepare('INSERT INTO diet_logs (id,date,meal,name,cal) VALUES (?,?,?,?,?)');
@@ -171,8 +172,6 @@ function writeData(obj) {
       insBook.run(b.id, b.title, b.author || '', b.pages, b.read, b.intro || '', b.content || '');
       (b.notes || []).forEach(n => insNote.run(n.id, b.id, n.date, n.text));
     });
-    const insMood = db.prepare('INSERT INTO moods (id,date,mood,text) VALUES (?,?,?,?)');
-    (obj.mood?.logs || []).forEach(l => insMood.run(l.id, l.date, l.mood, l.text || ''));
     const insWord = db.prepare('INSERT INTO english_words (id,word,meaning,date,review) VALUES (?,?,?,?,?)');
     (obj.english?.words || []).forEach(w => insWord.run(w.id, w.word, w.meaning, w.date, w.review || 0));
     const insProj = db.prepare('INSERT INTO projects (id,title,type,source,content,done) VALUES (?,?,?,?,?,?)');
@@ -232,7 +231,7 @@ function readMdSafe(p) { try { return readFileSync(p, 'utf8'); } catch { return 
 function parseObsidian() {
   const data = {
     todos: [], diet: { logs: [], goal: 2000, recipes: [] }, exercise: { logs: [] },
-    finance: { records: [], priceItems: [] }, books: [], mood: { logs: [] },
+    finance: { records: [], priceItems: [] }, books: [],
     english: { words: [], dailyGoal: 20 }, projects: [], resources: [], theme: defaultTheme
   };
   let id = 1;
@@ -297,18 +296,6 @@ function parseObsidian() {
     data.books.push({ id: id++, title: fm.title || f.name.replace(/\.md$/, ''), author: '', pages: 0, read: 0, intro, content });
   });
 
-  // 5. 心情记录 <- 日记/daily note/2026
-  const diaryDir = path.join(VAULT, '日记/daily note/2026');
-  listMd(diaryDir).forEach(f => {
-    const text = readMdSafe(f.path);
-    const { fm, body } = parseFrontmatter(text);
-    let mood = 3;
-    if (fm.mood !== undefined) { const mm = String(fm.mood).match(/\d/); if (mm) mood = parseInt(mm[0]); }
-    const date = String(fm.date || '').slice(0, 10);
-    const plain = stripObsidian(body).slice(0, 600);
-    if (date) data.mood.logs.push({ id: id++, date, mood, text: plain });
-  });
-
   // 6. 项目/目标 <- 任务板 + 人生管理
   const addProjects = (dir, type) => {
     listMdRecursive(dir).forEach(f => {
@@ -345,7 +332,6 @@ const CSV_TABLES = {
   price_items:   { label: '物价库',   cols: [['id','ID'],['kind','类别'],['name','名称'],['category','类型'],['unit','单位'],['price','购买价'],['unit_price','单价'],['date','日期'],['shop','店铺'],['note','备注'],['status','状态']] },
   books:         { label: '读书',     cols: [['id','ID'],['title','书名'],['author','作者'],['pages','页数'],['read','已读'],['intro','简介']] },
   book_notes:    { label: '读书笔记', cols: [['id','ID'],['book_id','书ID'],['date','日期'],['text','笔记']] },
-  moods:         { label: '心情',     cols: [['id','ID'],['date','日期'],['mood','心情分'],['text','内容']] },
   english_words: { label: '英语单词', cols: [['id','ID'],['word','单词'],['meaning','释义'],['date','日期'],['review','复习次数']] },
   projects:      { label: '项目目标', cols: [['id','ID'],['title','标题'],['type','类型'],['source','来源'],['content','内容'],['done','完成']] },
   resources:     { label: '资料库',   cols: [['id','ID'],['title','标题'],['source','来源'],['summary','摘要']] },
@@ -411,7 +397,7 @@ const server = http.createServer(async (req, res) => {
       const counts = {
         todos: imported.todos.length, recipes: imported.diet.recipes.length,
         priceItems: imported.finance.priceItems.length, books: imported.books.length,
-        moods: imported.mood.logs.length, projects: imported.projects.length, resources: imported.resources.length
+        projects: imported.projects.length, resources: imported.resources.length
       };
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, counts }));
@@ -475,8 +461,8 @@ const server = http.createServer(async (req, res) => {
   // ---- 通用增量 / 更新接口（支持任意模块，单向存库，无覆盖风险）----
   const INSERT_TABLES = new Set([
     'todos','diet_logs','recipes','exercises','finances','price_items',
-    'books','book_notes','moods','english_words','projects','resources','cook_posts',
-    'help_docs','wishlist','taskboard'
+    'books','book_notes','english_words','projects','resources','cook_posts',
+    'help_docs','wishlist','taskboard','diary'
   ]);
   const getCols = (t) => db.prepare('PRAGMA table_info(' + t + ')').all().map(r => r.name);
   const normVal = (v) => {
@@ -535,6 +521,44 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: false, error: String(e) }));
       }
     });
+    return;
+  }
+
+  // 从 Obsidian 日记批量导入到 diary 表（按 date 去重，已存在则跳过）
+  if (req.method === 'POST' && url === '/api/import-diary') {
+    try {
+      const diaryDir = path.join(VAULT, '日记/daily note');
+      const files = listMdRecursive(diaryDir).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f.name));
+      const existing = new Set(db.prepare('SELECT date FROM diary').all().map(r => r.date));
+      let inserted = 0;
+      const insDiary = db.prepare('INSERT INTO diary (id,date,title,content,mood,created_at) VALUES (?,?,?,?,?,?)');
+      for (const f of files) {
+        const text = readMdSafe(f.path);
+        const lines = text.split('\n');
+        let date = '', title = '', mood = '';
+        const body = [];
+        let seenTitle = false;
+        for (const line of lines) {
+          const dM = line.match(/^date:\s*(.+)$/);
+          if (dM && !date) { date = dM[1].trim().slice(0, 10); continue; }
+          const mooM = line.match(/^mood:\s*(.+)$/);
+          if (mooM && !mood) { mood = mooM[1].trim(); continue; }
+          const tM = line.match(/^#\s+(.+)$/);
+          if (tM && !seenTitle) { title = tM[1].trim(); seenTitle = true; continue; }
+          if (seenTitle) body.push(line);
+        }
+        if (!date) { const fm2 = f.name.match(/^(\d{4}-\d{2}-\d{2})/); if (fm2) date = fm2[1]; }
+        if (!date || existing.has(date)) continue;
+        const content = body.join('\n').trim();
+        insDiary.run(Date.now() + inserted, date, title, content, mood, new Date().toISOString());
+        inserted++;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, inserted }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
     return;
   }
 
