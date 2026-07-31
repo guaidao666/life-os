@@ -38,6 +38,10 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY, title TEXT, type TEXT, source TEXT, content TEXT, done INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS resources (id INTEGER PRIMARY KEY, title TEXT, source TEXT, summary TEXT);
   CREATE TABLE IF NOT EXISTS cook_posts (id INTEGER PRIMARY KEY, date TEXT, dish TEXT, feeling TEXT, rating INTEGER DEFAULT 0, recipe_id INTEGER, images TEXT);
+  CREATE TABLE IF NOT EXISTS meals (
+    id INTEGER PRIMARY KEY, date TEXT, meal TEXT, type TEXT, recipe_id INTEGER,
+    name TEXT, cal INTEGER DEFAULT 0, images TEXT, feeling TEXT, rating INTEGER DEFAULT 0, created_at TEXT
+  );
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
   CREATE TABLE IF NOT EXISTS player_stats (
     id INTEGER PRIMARY KEY, willpower REAL DEFAULT 0, starwish REAL DEFAULT 0,
@@ -59,6 +63,23 @@ try { db.exec('ALTER TABLE taskboard ADD COLUMN done_at TEXT'); } catch (e) { /*
 try { db.exec('ALTER TABLE taskboard ADD COLUMN ord INTEGER DEFAULT 0'); } catch (e) { /* 列已存在则忽略 */ }
 // 迁移：todos 增加 points（每条待办自定义愿力点，默认 1）
 try { db.exec('ALTER TABLE todos ADD COLUMN points INTEGER DEFAULT 1'); } catch (e) { /* 列已存在则忽略 */ }
+// 迁移：recipes 增加扩展字段（时间/难度/食材/标签/封面，用于饮食中心）
+try { db.exec('ALTER TABLE recipes ADD COLUMN time INTEGER DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE recipes ADD COLUMN difficulty INTEGER DEFAULT 2'); } catch (e) {}
+try { db.exec('ALTER TABLE recipes ADD COLUMN ingredients TEXT DEFAULT \'[]\''); } catch (e) {}
+try { db.exec('ALTER TABLE recipes ADD COLUMN tags TEXT DEFAULT \'[]\''); } catch (e) {}
+try { db.exec('ALTER TABLE recipes ADD COLUMN image TEXT DEFAULT \'\''); } catch (e) {}
+// 迁移：cook_posts / diet_logs → meals（合并饮食数据，type=cook 自己做 / eat_out 外食）
+try {
+  db.exec(`INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating)
+    SELECT id,date,'晚餐','cook',recipe_id,dish,0,images,feeling,rating FROM cook_posts
+    WHERE NOT EXISTS (SELECT 1 FROM meals m WHERE m.id = cook_posts.id)`);
+} catch (e) {}
+try {
+  db.exec(`INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating)
+    SELECT id,date,meal,'eat_out',NULL,name,cal,'[]','','0' FROM diet_logs
+    WHERE NOT EXISTS (SELECT 1 FROM meals m WHERE m.id = diet_logs.id)`);
+} catch (e) {}
 
 const getSetting = (k, d) => {
   const row = db.prepare('SELECT value FROM settings WHERE key=?').get(k);
@@ -94,10 +115,10 @@ function num(v) {
 function readData() {
   const todos = db.prepare('SELECT id,text,priority,done,points FROM todos').all()
     .map(r => ({ id: r.id, text: r.text, priority: r.priority, done: !!r.done, points: r.points != null ? r.points : 1 }));
-  const dietLogs = db.prepare('SELECT id,date,meal,name,cal FROM diet_logs').all()
-    .map(r => ({ id: r.id, date: r.date, meal: r.meal, name: r.name, cal: r.cal }));
-  const recipes = db.prepare('SELECT id,name,category,cost,steps,source FROM recipes').all()
-    .map(r => ({ id: r.id, name: r.name, category: r.category, cost: r.cost, steps: r.steps, source: r.source }));
+  const meals = db.prepare('SELECT id,date,meal,type,recipe_id,name,cal,images,feeling,rating FROM meals ORDER BY date DESC, id DESC').all()
+    .map(r => ({ id: r.id, date: r.date, meal: r.meal || '', type: r.type || 'cook', recipeId: r.recipe_id, name: r.name || '', cal: r.cal || 0, images: r.images ? JSON.parse(r.images) : [], feeling: r.feeling || '', rating: r.rating || 0 }));
+  const recipes = db.prepare('SELECT id,name,category,cost,steps,source,time,difficulty,ingredients,tags,image FROM recipes').all()
+    .map(r => ({ id: r.id, name: r.name, category: r.category, cost: r.cost, steps: r.steps, source: r.source, time: r.time || 0, difficulty: r.difficulty || 2, ingredients: r.ingredients ? JSON.parse(r.ingredients) : [], tags: r.tags ? JSON.parse(r.tags) : [], image: r.image || '' }));
   const exercises = db.prepare('SELECT id,date,type,min,cal,distance FROM exercises').all()
     .map(r => ({ id: r.id, date: r.date, type: r.type, min: r.min, cal: r.cal, distance: r.distance }));
   const fin = db.prepare('SELECT id,date,type,category,amount,note FROM finances').all()
@@ -117,9 +138,6 @@ function readData() {
     .map(r => ({ id: r.id, title: r.title, type: r.type, source: r.source, content: r.content, done: !!r.done }));
   const resources = db.prepare('SELECT id,title,source,summary FROM resources').all()
     .map(r => ({ id: r.id, title: r.title, source: r.source, summary: r.summary }));
-  const cookPosts = db.prepare('SELECT id,date,dish,feeling,rating,recipe_id,images FROM cook_posts').all()
-    .map(r => ({ id: r.id, date: r.date, dish: r.dish, feeling: r.feeling, rating: r.rating, recipeId: r.recipe_id, images: r.images ? JSON.parse(r.images) : [] }));
-
   const helpDoc = db.prepare('SELECT content FROM help_docs WHERE id=1').get();
   const help = helpDoc ? helpDoc.content : '';
   const wishlist = db.prepare('SELECT id,name,required_stars,done,note FROM wishlist').all()
@@ -147,14 +165,13 @@ function readData() {
 
   return {
     todos,
-    diet: { logs: dietLogs, goal: dietGoal, recipes },
+    food: { meals, goal: dietGoal, recipes },
     exercise: { logs: exercises },
     finance: { records: fin, priceItems },
     books,
     english: { words, dailyGoal: enGoal },
     projects,
     resources,
-    cook: { posts: cookPosts },
     help,
     wishlist,
     player,
@@ -168,13 +185,11 @@ function readData() {
 function writeData(obj) {
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM settings;');
+    db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM meals; DELETE FROM settings;');
     const insTodo = db.prepare('INSERT INTO todos (id,text,priority,done,points) VALUES (?,?,?,?,?)');
     (obj.todos || []).forEach(t => insTodo.run(t.id, t.text, t.priority, t.done ? 1 : 0, t.points || 1));
-    const insDiet = db.prepare('INSERT INTO diet_logs (id,date,meal,name,cal) VALUES (?,?,?,?,?)');
-    (obj.diet?.logs || []).forEach(l => insDiet.run(l.id, l.date, l.meal, l.name, l.cal));
-    const insRecipe = db.prepare('INSERT INTO recipes (id,name,category,cost,steps,source) VALUES (?,?,?,?,?,?)');
-    (obj.diet?.recipes || []).forEach(r => insRecipe.run(r.id, r.name, r.category, r.cost, r.steps, r.source));
+    const insRecipe = db.prepare('INSERT INTO recipes (id,name,category,cost,steps,source,time,difficulty,ingredients,tags,image) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    (obj.food?.recipes || []).forEach(r => insRecipe.run(r.id, r.name, r.category, r.cost, r.steps, r.source, r.time || 0, r.difficulty || 2, JSON.stringify(r.ingredients || []), JSON.stringify(r.tags || []), r.image || ''));
     const insEx = db.prepare('INSERT INTO exercises (id,date,type,min,cal,distance) VALUES (?,?,?,?,?,?)');
     (obj.exercise?.logs || []).forEach(l => insEx.run(l.id, l.date, l.type, l.min, l.cal, l.distance));
     const insFin = db.prepare('INSERT INTO finances (id,date,type,category,amount,note) VALUES (?,?,?,?,?,?)');
@@ -193,10 +208,10 @@ function writeData(obj) {
     (obj.projects || []).forEach(p => insProj.run(p.id, p.title, p.type, p.source, p.content, p.done ? 1 : 0));
     const insRes = db.prepare('INSERT INTO resources (id,title,source,summary) VALUES (?,?,?,?)');
     (obj.resources || []).forEach(r => insRes.run(r.id, r.title, r.source, r.summary));
-    const insCook = db.prepare('INSERT INTO cook_posts (id,date,dish,feeling,rating,recipe_id,images) VALUES (?,?,?,?,?,?,?)');
-    (obj.cook?.posts || []).forEach(p => insCook.run(p.id, p.date, p.dish, p.feeling || '', p.rating || 0, p.recipeId || null, JSON.stringify(p.images || [])));
+    const insMeal = db.prepare('INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    (obj.food?.meals || []).forEach(m => insMeal.run(m.id, m.date, m.meal || '', m.type || 'cook', m.recipeId || null, m.name || '', m.cal || 0, JSON.stringify(m.images || []), m.feeling || '', m.rating || 0));
     const insSet = db.prepare('INSERT INTO settings (key,value) VALUES (?,?)');
-    insSet.run('diet_goal', String(obj.diet?.goal ?? 2000));
+    insSet.run('diet_goal', String(obj.food?.goal ?? 2000));
     insSet.run('english_goal', String(obj.english?.dailyGoal ?? 20));
     insSet.run('theme', JSON.stringify(obj.theme || defaultTheme));
     db.exec('COMMIT');
@@ -245,7 +260,7 @@ function readMdSafe(p) { try { return readFileSync(p, 'utf8'); } catch { return 
 
 function parseObsidian() {
   const data = {
-    todos: [], diet: { logs: [], goal: 2000, recipes: [] }, exercise: { logs: [] },
+    todos: [], food: { meals: [], goal: 2000, recipes: [] }, exercise: { logs: [] },
     finance: { records: [], priceItems: [] }, books: [],
     english: { words: [], dailyGoal: 20 }, projects: [], resources: [], theme: defaultTheme
   };
@@ -276,7 +291,7 @@ function parseObsidian() {
     const name = f.name.replace(/\.md$/, '');
     const body = stripObsidian(readMdSafe(f.path));
     const m = menuMap[name];
-    data.diet.recipes.push({ id: id++, name, category: '菜谱', cost: m || '', steps: body.slice(0, 800), source: '生活/饮食/' + f.name });
+    data.food.recipes.push({ id: id++, name, category: '菜谱', cost: m || '', steps: body.slice(0, 800), source: '生活/饮食/' + f.name });
   });
 
   // 3. 物价库 <- 生活物价库.xlsx
@@ -340,8 +355,8 @@ function parseObsidian() {
 // ---- 按模块导出 CSV（单表备份）----
 const CSV_TABLES = {
   todos:         { label: '待办',     cols: [['id','ID'],['text','内容'],['priority','优先级'],['done','完成']] },
-  diet_logs:     { label: '饮食',     cols: [['id','ID'],['date','日期'],['meal','餐次'],['name','食物'],['cal','热量']] },
-  recipes:       { label: '菜谱',     cols: [['id','ID'],['name','菜名'],['category','分类'],['cost','成本价'],['steps','做法'],['source','来源']] },
+  meals:         { label: '饮食日志', cols: [['id','ID'],['date','日期'],['meal','餐次'],['type','类型'],['recipe_id','菜谱ID'],['name','名称'],['cal','热量'],['feeling','感受'],['rating','评分']] },
+  recipes:       { label: '菜谱',     cols: [['id','ID'],['name','菜名'],['category','分类'],['cost','成本价'],['time','分钟'],['difficulty','难度'],['ingredients','食材'],['tags','标签'],['steps','做法'],['source','来源']] },
   exercises:     { label: '运动',     cols: [['id','ID'],['date','日期'],['type','类型'],['min','时长(分)'],['cal','热量']] },
   finances:      { label: '记账',     cols: [['id','ID'],['date','日期'],['type','类型'],['category','类别'],['amount','金额'],['note','备注']] },
   price_items:   { label: '物价库',   cols: [['id','ID'],['kind','类别'],['name','名称'],['category','类型'],['unit','单位'],['price','购买价'],['unit_price','单价'],['date','日期'],['shop','店铺'],['note','备注'],['status','状态']] },
@@ -350,7 +365,6 @@ const CSV_TABLES = {
   english_words: { label: '英语单词', cols: [['id','ID'],['word','单词'],['meaning','释义'],['date','日期'],['review','复习次数']] },
   projects:      { label: '项目目标', cols: [['id','ID'],['title','标题'],['type','类型'],['source','来源'],['content','内容'],['done','完成']] },
   resources:     { label: '资料库',   cols: [['id','ID'],['title','标题'],['source','来源'],['summary','摘要']] },
-  cook_posts:     { label: '烟火食记', cols: [['id','ID'],['date','日期'],['dish','菜名'],['feeling','感受'],['rating','评分'],['recipe_id','菜谱ID']] },
 };
 
 function toCSV(rows, cols) {
@@ -446,7 +460,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 增量写入：新增一条「烟火食记」做菜记录（只插 cook_posts，不动其他 11 表）
+  // 增量写入：新增一条做菜记录（写入 meals 表，type='cook'，不动其他 13 张表）
   if (req.method === 'POST' && url === '/api/cook') {
     let body = '';
     req.on('data', c => body += c);
@@ -461,8 +475,8 @@ const server = http.createServer(async (req, res) => {
         const feeling = String(p.feeling || '');
         const recipeId = p.recipeId ? Number(p.recipeId) : null;
         const images = Array.isArray(p.images) ? JSON.stringify(p.images) : '[]';
-        db.prepare('INSERT INTO cook_posts (id,date,dish,feeling,rating,recipe_id,images) VALUES (?,?,?,?,?,?,?)')
-          .run(id, date, dish, feeling, rating, recipeId, images);
+        db.prepare('INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating) VALUES (?,?,?,?,?,?,?,?,?,?)')
+          .run(id, date, '晚餐', 'cook', recipeId, dish, 0, images, feeling, rating);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, id, date, dish }));
       } catch (e) {
@@ -475,8 +489,8 @@ const server = http.createServer(async (req, res) => {
 
   // ---- 通用增量 / 更新接口（支持任意模块，单向存库，无覆盖风险）----
   const INSERT_TABLES = new Set([
-    'todos','diet_logs','recipes','exercises','finances','price_items',
-    'books','book_notes','english_words','projects','resources','cook_posts',
+    'todos','recipes','meals','exercises','finances','price_items',
+    'books','book_notes','english_words','projects','resources',
     'help_docs','wishlist','taskboard','diary','reward_log'
   ]);
   const getCols = (t) => db.prepare('PRAGMA table_info(' + t + ')').all().map(r => r.name);

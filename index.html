@@ -283,6 +283,14 @@
       color: var(--text-secondary); transition: all .2s;
     }
     .meal-tab.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+    /* 饮食中心 Tab */
+    .food-tabs { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+    .food-tab {
+      padding: 9px 18px; border-radius: 22px; border: 1px solid var(--border);
+      background: var(--surface-solid); cursor: pointer; font-size: 14px; font-weight: 600;
+      color: var(--text-secondary); transition: all .2s;
+    }
+    .food-tab.active { background: var(--orange); color: #fff; border-color: var(--orange); box-shadow: 0 4px 14px rgba(255,149,0,.28); }
     .quick-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
     .quick-tag {
       padding: 6px 12px; border-radius: 20px; background: var(--bg);
@@ -575,7 +583,7 @@
         <div class="nav-item" data-section="overview" onclick="showSection('overview'); setTimeout(()=>{const e=document.getElementById('planBlock'); if(e) e.scrollIntoView({behavior:'smooth'});},80)"><span class="nav-icon">☑️</span>每日计划</div>
 
         <div class="nav-group-title">日常记录</div>
-        <div class="nav-item" data-section="diet" onclick="showSection('diet')"><span class="nav-icon">🍎</span>饮食记录</div>
+        <div class="nav-item" data-section="food" onclick="showSection('food')"><span class="nav-icon">🍳</span>饮食中心</div>
         <div class="nav-item" data-section="exercise" onclick="showSection('exercise')"><span class="nav-icon">🏃</span>运动打卡</div>
         <div class="nav-item" data-section="finance" onclick="showSection('finance')"><span class="nav-icon">💰</span>记账存钱</div>
         <div class="nav-item" data-section="diary" onclick="showSection('diary')"><span class="nav-icon">📔</span>日记</div>
@@ -583,7 +591,6 @@
         <div class="nav-group-title">成长积累</div>
         <div class="nav-item" data-section="books" onclick="showSection('books')"><span class="nav-icon">📚</span>读书收获</div>
         <div class="nav-item" data-section="english" onclick="showSection('english')"><span class="nav-icon">🔤</span>英语学习</div>
-        <div class="nav-item" data-section="cook" onclick="showSection('cook')"><span class="nav-icon">🍳</span>烟火食记</div>
         <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="nav-icon">🎯</span>项目/目标</div>
 
         <div class="nav-group-title">资料与工具</div>
@@ -642,7 +649,7 @@
             <div class="today-panel-title">快速记录</div>
             <div class="quick-grid">
               <button class="quick-btn" onclick="showSection('finance')">💰 记一笔</button>
-              <button class="quick-btn" onclick="showSection('diet')">🍎 记一餐</button>
+              <button class="quick-btn" onclick="showSection('food')">🍎 记一餐</button>
               <button class="quick-btn" onclick="showSection('exercise')">🏃 记运动</button>
             </div>
           </div>
@@ -803,52 +810,64 @@
 
       <!-- 每日计划已并入总览底部 planBlock -->
 
-      <!-- 2. 饮食记录 -->
-      <section class="section" id="sec-diet">
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-title">🍽️ 记录饮食</div>
-            <div class="meal-tabs" id="mealTabs">
-              <div class="meal-tab active" data-meal="早餐" onclick="selectMeal(this)">早餐</div>
-              <div class="meal-tab" data-meal="午餐" onclick="selectMeal(this)">午餐</div>
-              <div class="meal-tab" data-meal="晚餐" onclick="selectMeal(this)">晚餐</div>
-              <div class="meal-tab" data-meal="加餐" onclick="selectMeal(this)">加餐</div>
+      <!-- 饮食中心（合并 饮食记录 + 烟火食记） -->
+      <section class="section" id="sec-food">
+        <div class="food-tabs" id="foodTabs">
+          <div class="food-tab active" onclick="switchFoodTab('today', this)">🍽️ 今日吃什么</div>
+          <div class="food-tab" onclick="switchFoodTab('recipes', this)">📖 菜谱库</div>
+          <div class="food-tab" onclick="switchFoodTab('log', this)">📋 饮食日志</div>
+        </div>
+
+        <!-- Tab 1: 今日吃什么 -->
+        <div id="foodTabToday">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+            <button class="btn btn-green" onclick="openCookModal()">🍳 记录做菜</button>
+            <button class="btn btn-orange" onclick="openMealModal()">🍎 记一餐</button>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">🔥 今日摄入</div>
+              <div class="grid-3" style="margin-bottom:16px;">
+                <div class="stat-card"><div class="stat-number" id="dietIntake" style="color:var(--orange)">0</div><div class="stat-label">已摄入</div></div>
+                <div class="stat-card"><div class="stat-number" id="dietGoal">2000</div><div class="stat-label">目标</div></div>
+                <div class="stat-card"><div class="stat-number" id="dietLeft">2000</div><div class="stat-label">剩余</div></div>
+              </div>
+              <div class="form-row" style="margin-bottom:16px;">
+                <input class="input" id="dietGoalInput" type="number" placeholder="设置每日目标卡路里" value="2000">
+                <button class="btn btn-blue" onclick="setDietGoal()">设置</button>
+              </div>
+              <canvas id="dietChart" height="220"></canvas>
             </div>
-            <div class="form-row">
-              <input class="input" id="foodInput" placeholder="食物名称">
-              <input class="input" id="calInput" type="number" placeholder="卡路里" style="width:100px;flex:0;">
-              <button class="btn btn-orange" onclick="addDiet()">记录</button>
-            </div>
-            <div class="quick-tags">
-              <span class="quick-tag" onclick="quickDiet('米饭', 200)">🍚 米饭 200</span>
-              <span class="quick-tag" onclick="quickDiet('鸡蛋', 70)">🥚 鸡蛋 70</span>
-              <span class="quick-tag" onclick="quickDiet('苹果', 95)">🍎 苹果 95</span>
-              <span class="quick-tag" onclick="quickDiet('牛奶', 150)">🥛 牛奶 150</span>
-              <span class="quick-tag" onclick="quickDiet('鸡胸肉', 165)">🍗 鸡胸肉 165</span>
-              <span class="quick-tag" onclick="quickDiet('咖啡', 30)">☕ 咖啡 30</span>
-            </div>
-            <div style="margin-top:18px;">
-              <div id="dietList"></div>
+            <div class="card">
+              <div class="card-title">🍽️ 今日饮食</div>
+              <div id="foodTodayList"></div>
             </div>
           </div>
-          <div class="card">
-            <div class="card-title">🔥 今日摄入</div>
-            <div class="grid-3" style="margin-bottom:16px;">
-              <div class="stat-card"><div class="stat-number" id="dietIntake" style="color:var(--orange)">0</div><div class="stat-label">已摄入</div></div>
-              <div class="stat-card"><div class="stat-number" id="dietGoal">2000</div><div class="stat-label">目标</div></div>
-              <div class="stat-card"><div class="stat-number" id="dietLeft">2000</div><div class="stat-label">剩余</div></div>
-            </div>
-            <div class="form-row" style="margin-bottom:16px;">
-              <input class="input" id="dietGoalInput" type="number" placeholder="设置每日目标卡路里" value="2000">
-              <button class="btn btn-blue" onclick="setDietGoal()">设置</button>
-            </div>
-            <canvas id="dietChart" height="220"></canvas>
+          <div class="card" style="margin-top:18px;">
+            <div class="card-title">🍳 最近做菜（烟火食记）</div>
+            <div id="cookFeed" style="margin-top:8px;"></div>
           </div>
         </div>
-        <div class="grid-2" style="margin-top:18px;">
-          <div class="card" style="grid-column:1/-1;">
-            <div class="card-title">📖 菜谱库（来自 Obsidian 饮食笔记）</div>
-            <div id="recipeList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;"></div>
+
+        <!-- Tab 2: 菜谱库 -->
+        <div id="foodTabRecipes" style="display:none;">
+          <div class="card">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+              <input class="input" id="cookRecipeSearch" placeholder="🔍 搜索菜名…" oninput="renderRecipeGrid()" style="max-width:260px;">
+              <select class="input" id="recipeCatFilter" onchange="renderRecipeGrid()" style="width:140px;"></select>
+            </div>
+            <div id="recipeGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;"></div>
+          </div>
+        </div>
+
+        <!-- Tab 3: 饮食日志 -->
+        <div id="foodTabLog" style="display:none;">
+          <div class="card">
+            <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+              <button class="btn btn-green" onclick="openCookModal()">🍳 记录做菜</button>
+              <button class="btn btn-orange" onclick="openMealModal()">🍎 记一餐</button>
+            </div>
+            <div id="mealLogList"></div>
           </div>
         </div>
       </section>
@@ -1070,21 +1089,6 @@
         </div>
       </section>
 
-      <!-- 11. 烟火食记（融合页：菜谱集 + 我做菜的记录） -->
-      <section class="section" id="sec-cook">
-        <div class="card" style="margin-bottom:18px;">
-          <div class="card-title">📖 菜谱集（来自 Obsidian，点开看做法）</div>
-          <input class="input" id="cookRecipeSearch" placeholder="🔍 搜索菜名…" oninput="renderCook()" style="max-width:300px;margin-bottom:12px;">
-          <div id="cookRecipeList"></div>
-        </div>
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-            <div class="card-title" style="margin:0;">🍳 我做菜的记录</div>
-            <button class="btn btn-green" onclick="openCookModal()">+ 记录今天做的菜</button>
-          </div>
-          <div id="cookFeed" style="margin-top:16px;"></div>
-        </div>
-      </section>
     </main>
   </div>
 
@@ -1174,11 +1178,36 @@
     </div>
   </div>
 
+  <!-- 饮食中心：记一餐弹窗 -->
+  <div class="modal" id="mealModal">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <h2 style="margin:0;">记一餐</h2>
+        <button class="close-btn" onclick="closeMealModal()">×</button>
+      </div>
+      <div class="form-row">
+        <input class="input" id="mealDate" type="date">
+        <select class="input" id="mealMeal" style="width:120px;">
+          <option>早餐</option><option>午餐</option><option selected>晚餐</option><option>加餐</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <input class="input" id="mealName" placeholder="吃了什么，如 番茄炒蛋">
+        <input class="input" id="mealCal" type="number" placeholder="热量 kcal" style="width:130px;">
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin:2px 0 10px;">用于记录热量摄入（外食/加餐等），与「记录做菜」（带照片、评分的烟火食记）分开。</div>
+      <div class="form-row" style="justify-content:flex-end;margin-top:8px;">
+        <button class="btn" onclick="closeMealModal()">取消</button>
+        <button class="btn btn-orange" onclick="saveMeal()">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Data & state
     const defaultData = {
       todos: [],
-      diet: { logs: [], goal: 2000 },
+      food: { meals: [], goal: 2000, recipes: [] },
       exercise: { logs: [] },
       finance: { records: [] },
       books: [],
@@ -1377,40 +1406,93 @@
       circle.style.strokeDashoffset = offset;
     }
 
-    // Diet
-    let selectedMeal = '早餐';
-    function selectMeal(el) {
-      document.querySelectorAll('.meal-tab').forEach(t => t.classList.remove('active'));
-      el.classList.add('active');
-      selectedMeal = el.dataset.meal;
+    // ---- 饮食中心 ----
+    function switchFoodTab(tab, el) {
+      document.querySelectorAll('.food-tab').forEach(t => t.classList.remove('active'));
+      if (el) el.classList.add('active');
+      document.getElementById('foodTabToday').style.display = (tab === 'today') ? '' : 'none';
+      document.getElementById('foodTabRecipes').style.display = (tab === 'recipes') ? '' : 'none';
+      document.getElementById('foodTabLog').style.display = (tab === 'log') ? '' : 'none';
+      if (tab === 'recipes') renderRecipeGrid();
+      if (tab === 'log') renderMealLog();
     }
-    function quickDiet(name, cal) { document.getElementById('foodInput').value = name; document.getElementById('calInput').value = cal; }
-    function addDiet() {
-      const name = document.getElementById('foodInput').value.trim();
-      const cal = parseInt(document.getElementById('calInput').value) || 0;
-      if (!name) return;
-      data.diet.logs.push({ id: Date.now(), date: todayStr(), meal: selectedMeal, name, cal });
-      document.getElementById('foodInput').value = ''; document.getElementById('calInput').value = '';
+    function mealTypeLabel(t) { return t === 'cook' ? '我做' : (t === 'eat_out' ? '外食' : '计划'); }
+    function openMealModal() {
+      mealEditId = null;
+      document.getElementById('mealDate').value = todayStr();
+      document.getElementById('mealMeal').value = '晚餐';
+      document.getElementById('mealName').value = '';
+      document.getElementById('mealCal').value = '';
+      document.getElementById('mealModal').classList.add('open');
+    }
+    function closeMealModal() { document.getElementById('mealModal').classList.remove('open'); }
+    function quickDiet(name, cal) {
+      document.getElementById('mealName').value = name;
+      document.getElementById('mealCal').value = cal;
+      openMealModal();
+    }
+    function saveMeal() {
+      const name = document.getElementById('mealName').value.trim();
+      if (!name) { alert('名称不能为空'); return; }
+      const meal = {
+        id: mealEditId || Date.now(),
+        date: document.getElementById('mealDate').value || todayStr(),
+        meal: document.getElementById('mealMeal').value,
+        type: 'eat_out',
+        name,
+        cal: parseInt(document.getElementById('mealCal').value) || 0
+      };
+      if (mealEditId) {
+        const idx = data.food.meals.findIndex(m => m.id === mealEditId);
+        if (idx >= 0) data.food.meals[idx] = Object.assign(data.food.meals[idx], meal);
+      } else {
+        data.food.meals.push(meal);
+      }
+      closeMealModal();
+      saveData();
+    }
+    function editMeal(id) {
+      const m = (data.food.meals || []).find(x => x.id === id);
+      if (!m) return;
+      mealEditId = id;
+      document.getElementById('mealDate').value = m.date || todayStr();
+      document.getElementById('mealMeal').value = m.meal || '晚餐';
+      document.getElementById('mealName').value = m.name || '';
+      document.getElementById('mealCal').value = m.cal || 0;
+      document.getElementById('mealModal').classList.add('open');
+    }
+    function deleteMeal(id) {
+      if (!confirm('确定删除这条饮食记录吗？')) return;
+      data.food.meals = (data.food.meals || []).filter(m => m.id !== id);
       saveData();
     }
     function setDietGoal() {
-      data.diet.goal = parseInt(document.getElementById('dietGoalInput').value) || 2000;
+      data.food.goal = parseInt(document.getElementById('dietGoalInput').value) || 2000;
       saveData();
     }
-    function renderDiet() {
-      const todayLogs = data.diet.logs.filter(l => l.date === todayStr());
-      const total = todayLogs.reduce((s,l) => s + l.cal, 0);
-      document.getElementById('dietIntake').textContent = total;
-      document.getElementById('dietGoal').textContent = data.diet.goal;
-      document.getElementById('dietLeft').textContent = Math.max(0, data.diet.goal - total);
-      document.getElementById('dietGoalInput').value = data.diet.goal;
-      const list = document.getElementById('dietList');
-      if (!todayLogs.length) list.innerHTML = '<div class="empty-state" style="padding:20px;">今日暂无记录</div>';
-      else list.innerHTML = todayLogs.map(l => `<div class="record-item"><span><span class="tag">${l.meal}</span>${escapeHtml(l.name)}</span><span style="font-weight:600;">${l.cal} kcal</span></div>`).join('');
-
+    function mealRowHtml(m) {
+      const badge = '<span class="tag" style="background:var(--orange);color:#fff;">' + mealTypeLabel(m.type) + '</span>';
+      const stars = m.rating ? ' <span style="color:var(--orange);">★'.repeat(m.rating) + '</span>' : '';
+      const cal = m.cal ? ' <b>' + m.cal + ' kcal</b>' : '';
+      const note = m.feeling ? ' <span style="color:var(--text-secondary);font-size:12px;">' + escapeHtml(m.feeling.slice(0, 22)) + '</span>' : '';
+      return '<div class="record-item"><span>' + badge + ' <span class="tag">' + escapeHtml(m.meal || '') + '</span> ' + escapeHtml(m.name) + cal + note + '</span><span>' + stars + '</span></div>';
+    }
+    function renderFood() {
+      const meals = data.food.meals || [];
+      const today = todayStr();
+      const todayMeals = meals.filter(m => m.date === today);
+      const intake = todayMeals.filter(m => m.cal).reduce((s, m) => s + (m.cal || 0), 0);
+      document.getElementById('dietIntake').textContent = intake;
+      document.getElementById('dietGoal').textContent = data.food.goal;
+      document.getElementById('dietLeft').textContent = Math.max(0, data.food.goal - intake);
+      document.getElementById('dietGoalInput').value = data.food.goal;
+      const tl = document.getElementById('foodTodayList');
+      if (!todayMeals.length) tl.innerHTML = '<div class="empty-state" style="padding:20px;">今日还没有饮食记录，点上方按钮记一笔吧</div>';
+      else tl.innerHTML = todayMeals.slice().reverse().map(mealRowHtml).join('');
+      // 7 日摄入图
       const dates = [];
       for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); dates.push(dateKey(d)); }
-      const values = dates.map(d => data.diet.logs.filter(l => l.date === d).reduce((s,l) => s + l.cal, 0));
+      const values = dates.map(d => meals.filter(m => m.date === d && m.cal).reduce((s, m) => s + (m.cal || 0), 0));
       const ctx = document.getElementById('dietChart').getContext('2d');
       if (charts.diet) charts.diet.destroy();
       charts.diet = new Chart(ctx, {
@@ -1418,6 +1500,7 @@
         data: { labels: dates.map(d => d.slice(5)), datasets: [{ label: '卡路里', data: values, borderRadius: 8, backgroundColor: data.theme.colors.orange }] },
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(128,128,128,0.1)' } }, x: { grid: { display: false } } } }
       });
+      renderCookFeed();
     }
 
     // Exercise
@@ -1689,8 +1772,9 @@
         return { ok: true, module: '运动打卡' };
       }
       if ((m = text.match(/吃[了掉]\s*(.+?)(\d+)\s*[卡千]?卡/)) || (m = text.match(/(.+?)(\d+)\s*[卡千]?卡/))) {
-        data.diet.logs.push({ id: Date.now(), date: todayStr(), meal: '加餐', name: m[1].trim() || '食物', cal: parseInt(m[2]) });
-        return { ok: true, module: '饮食记录' };
+        if (!data.food.meals) data.food.meals = [];
+        data.food.meals.push({ id: Date.now(), date: todayStr(), meal: '加餐', type: 'eat_out', name: m[1].trim() || '食物', cal: parseInt(m[2]) });
+        return { ok: true, module: '饮食中心' };
       }
       if ((m = text.match(/读[了过]\s*[《"]?(.+?)[》"]?/)) || text.includes('读书')) {
         const title = m ? m[1].trim() : '未命名书籍';
@@ -1721,14 +1805,14 @@
       const dates = weekDates();
       const todoDone = data.todos.filter(t => t.done).length;
       const exMins = data.exercise.logs.filter(l => dates.includes(l.date)).reduce((s,l) => s + l.min, 0);
-      const dietCal = data.diet.logs.filter(l => dates.includes(l.date)).reduce((s,l) => s + l.cal, 0);
+      const dietCal = (data.food.meals || []).filter(l => dates.includes(l.date) && l.cal).reduce((s,l) => s + l.cal, 0);
       const finExp = data.finance.records.filter(r => r.type === 'expense' && dates.includes(r.date)).reduce((s,r) => s + r.amount, 0);
       const finInc = data.finance.records.filter(r => r.type === 'income' && dates.includes(r.date)).reduce((s,r) => s + r.amount, 0);
       const words = data.english.words.filter(w => dates.includes(w.date)).length;
       const insights = [];
       if (exMins >= 150) insights.push('本周运动量达标，继续保持！');
       else if (exMins < 60) insights.push('本周运动偏少，建议每天安排 20 分钟活动。');
-      if (dietCal > data.diet.goal * 7 * 1.1) insights.push('本周总摄入略高，注意控制餐量。');
+      if (dietCal > data.food.goal * 7 * 1.1) insights.push('本周总摄入略高，注意控制餐量。');
       if (finExp > finInc && finInc > 0) insights.push('本周支出超过收入，建议审视非必要开销。');
       if (words >= data.english.dailyGoal * 7) insights.push('英语学习进度很棒，超额完成周目标！');
       if (!insights.length) insights.push('本周数据平稳，建议给生活加点小目标。');
@@ -1776,7 +1860,7 @@
     }
     function csvModuleMap() {
       return {
-        todos: '待办', diet_logs: '饮食', exercises: '运动', finances: '记账',
+        todos: '待办', meals: '饮食日志', recipes: '菜谱', exercises: '运动', finances: '记账',
         books: '读书', book_notes: '读书笔记', english_words: '英语单词'
       };
     }
@@ -1817,7 +1901,7 @@
       const esc = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const map = {
         todos: { from: data.todos, header: ['ID','内容','优先级','完成'], row: t => [t.id, t.text, t.priority, t.done ? '是' : '否'] },
-        diet_logs: { from: data.diet?.logs || [], header: ['ID','日期','餐次','食物','热量'], row: l => [l.id, l.date, l.meal, l.name, l.cal] },
+        meals: { from: data.food?.meals || [], header: ['ID','日期','餐次','类型','菜名','热量','评分'], row: m => [m.id, m.date, m.meal, m.type, m.name, m.cal, m.rating] },
         exercises: { from: data.exercise?.logs || [], header: ['ID','日期','类型','时长(分)','热量'], row: l => [l.id, l.date, l.type, l.min, l.cal] },
         finances: { from: data.finance?.records || [], header: ['ID','日期','类型','类别','金额','备注'], row: r => [r.id, r.date, r.type, r.category, r.amount, r.note] },
         books: { from: data.books || [], header: ['ID','书名','作者','页数','已读'], row: b => [b.id, b.title, b.author, b.pages, b.read] },
@@ -1831,15 +1915,46 @@
 
     function escapeHtml(str) { return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-    function renderRecipes() {
-      const list = document.getElementById('recipeList');
-      const r = data.diet.recipes || [];
-      list.innerHTML = r.length ? r.map(x => `<div class="book-card">
-        <div style="font-weight:700;">${escapeHtml(x.name)}</div>
-        <div style="color:var(--text-secondary);font-size:13px;margin:4px 0;">${escapeHtml(x.category || '')} ${x.cost ? '· ' + escapeHtml(x.cost) : ''}</div>
-        <div style="font-size:13px;white-space:pre-wrap;max-height:120px;overflow:auto;">${escapeHtml(x.steps || '（暂无做法）')}</div>
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">📂 ${escapeHtml(x.source || '')}</div>
-      </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1;">暂无菜谱，去 Obsidian 导入或手动添加</div>';
+    function renderRecipeGrid() {
+      const grid = document.getElementById('recipeGrid');
+      if (!grid) return;
+      const q = (document.getElementById('cookRecipeSearch').value || '').trim().toLowerCase();
+      const cat = document.getElementById('recipeCatFilter').value;
+      let rs = data.food.recipes || [];
+      if (cat) rs = rs.filter(r => (r.category || '') === cat);
+      rs = rs.filter(r => !q || (r.name || '').toLowerCase().includes(q));
+      const sel = document.getElementById('recipeCatFilter');
+      if (sel && !sel.dataset.filled) {
+        const cats = [...new Set((data.food.recipes || []).map(r => r.category).filter(Boolean))];
+        sel.innerHTML = '<option value="">全部分类</option>' + cats.map(c => '<option value="' + c + '">' + escapeHtml(c) + '</option>').join('');
+        sel.dataset.filled = '1';
+      }
+      if (!rs.length) grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">没有匹配的菜谱</div>';
+      else grid.innerHTML = rs.map(r => {
+        const diff = '★'.repeat(r.difficulty || 2) + '☆'.repeat(5 - (r.difficulty || 2));
+        const tags = (r.tags || []).map(t => '<span class="tag" style="font-size:11px;">' + escapeHtml(t) + '</span>').join(' ');
+        return '<div class="book-card" onclick="showRecipe(' + r.id + ')" style="cursor:pointer;">' +
+          '<div style="font-weight:700;font-size:15px;">' + escapeHtml(r.name) + '</div>' +
+          '<div style="color:var(--text-secondary);font-size:13px;margin:4px 0;">' + escapeHtml(r.category || '') + (r.cost ? ' · ' + escapeHtml(r.cost) : '') + '</div>' +
+          '<div style="font-size:12px;color:var(--text-secondary);">⏱ ' + (r.time || 0) + ' 分钟 · 难度 ' + diff + '</div>' +
+          (tags ? '<div style="margin-top:6px;">' + tags + '</div>' : '') +
+        '</div>';
+      }).join('');
+    }
+    function showRecipe(id) {
+      const r = (data.food.recipes || []).find(x => x.id === id);
+      if (!r) return;
+      const ings = (r.ingredients || []).map(i => {
+        if (typeof i === 'string') return '<li>' + escapeHtml(i) + '</li>';
+        return '<li>' + escapeHtml(i.name + (i.amount ? ' ' + i.amount : '')) + '</li>';
+      }).join('');
+      const tags = (r.tags || []).map(t => escapeHtml(t)).join('、');
+      let body = '🍳 ' + r.name + (r.cost ? ('（约 ' + r.cost + '）') : '') + '\n';
+      body += '⏱ ' + (r.time || 0) + ' 分钟 · 难度 ' + '★'.repeat(r.difficulty || 2) + '\n';
+      if (tags) body += '标签：' + tags + '\n';
+      if (ings) body += '食材：\n' + ings + '\n';
+      body += '做法：\n' + (r.steps || '（暂无做法）');
+      alert(body);
     }
     function renderPriceItems() {
       const list = document.getElementById('priceList');
@@ -1876,28 +1991,19 @@
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">📂 ${escapeHtml(x.source || '')}</div>
       </div>`).join('');
     }
-    function renderCook() {
-      const rl = document.getElementById('cookRecipeList');
-      if (!rl) return;
-      const q = (document.getElementById('cookRecipeSearch')?.value || '').trim().toLowerCase();
-      const recipes = (data.diet.recipes || []).filter(r => !q || (r.name || '').toLowerCase().includes(q));
-      if (!recipes.length) rl.innerHTML = '<div class="empty-state">没有匹配的菜谱</div>';
-      else rl.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + recipes.map(r => {
-        const cost = r.cost ? ' <span style="color:var(--green)">（约 ' + r.cost + '）</span>' : '';
-        return '<div style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px;cursor:pointer;" onclick="showRecipe(' + r.id + ')"><b>' + escapeHtml(r.name) + '</b>' + cost + '</div>';
-      }).join('') + '</div>';
-
+    function renderCookFeed() {
       const feed = document.getElementById('cookFeed');
-      const posts = (data.cook?.posts || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      if (!posts.length) feed.innerHTML = '<div class="empty-state">还没有记录，点上面按钮发布第一道菜吧 🍳</div>';
+      if (!feed) return;
+      const posts = (data.food.meals || []).filter(m => m.type === 'cook').slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      if (!posts.length) feed.innerHTML = '<div class="empty-state">还没有记录，点上方按钮发布第一道菜吧 🍳</div>';
       else feed.innerHTML = posts.map(p => {
         const imgs = (p.images || []).map(u => '<img src="' + u + '" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:6px;cursor:pointer;" onclick="window.open(\'' + u + '\',\'_blank\')">').join('');
         const stars = '★'.repeat(p.rating || 0) + '☆'.repeat(5 - (p.rating || 0));
-        const recipe = (data.diet.recipes || []).find(r => r.id === p.recipeId);
+        const recipe = (data.food.recipes || []).find(r => r.id === p.recipeId);
         const recipeTag = recipe ? '<div style="margin:6px 0;"><span style="font-size:12px;color:var(--blue);">📎 ' + escapeHtml(recipe.name) + '</span></div>' : '';
         return '<div class="book-card" style="margin-bottom:14px;padding:14px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
-            '<div><div style="font-weight:700;font-size:17px;">🍽️ ' + escapeHtml(p.dish) + '</div><div style="font-size:12px;color:var(--text-secondary);">' + escapeHtml(p.date || '') + '</div></div>' +
+            '<div><div style="font-weight:700;font-size:17px;">🍽️ ' + escapeHtml(p.name) + '</div><div style="font-size:12px;color:var(--text-secondary);">' + escapeHtml(p.date || '') + '</div></div>' +
             '<div style="font-size:18px;color:var(--orange);white-space:nowrap;">' + stars + '</div>' +
           '</div>' +
           recipeTag +
@@ -1905,32 +2011,43 @@
           '<div style="font-size:14px;white-space:pre-wrap;line-height:1.6;">' + escapeHtml(p.feeling || '') + '</div>' +
           '<div style="display:flex;gap:14px;margin-top:10px;">' +
             '<span style="font-size:12px;color:var(--blue);cursor:pointer;" onclick="openCookModal(' + p.id + ')">✏️ 编辑</span>' +
-            '<span style="font-size:12px;color:#ff453a;cursor:pointer;" onclick="deleteCookPost(' + p.id + ')">🗑️ 删除</span>' +
+            '<span style="font-size:12px;color:#ff453a;cursor:pointer;" onclick="deleteMeal(' + p.id + ')">🗑️ 删除</span>' +
           '</div>' +
         '</div>';
       }).join('');
     }
-    function showRecipe(id) {
-      const r = (data.diet.recipes || []).find(x => x.id === id);
-      if (!r) return;
-      alert('🍳 ' + r.name + (r.cost ? ('（约 ' + r.cost + '）') : '') + '\n\n做法：\n' + (r.steps || '（暂无做法）'));
+
+    function renderMealLog() {
+      const list = document.getElementById('mealLogList');
+      if (!list) return;
+      const meals = (data.food.meals || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      if (!meals.length) list.innerHTML = '<div class="empty-state">暂无饮食记录，点上方按钮记一笔吧</div>';
+      else list.innerHTML = meals.map(m => {
+        const stars = m.rating ? '<span style="color:var(--orange);">★'.repeat(m.rating) + '</span>' : '';
+        const actions = '<span style="font-size:12px;color:var(--blue);cursor:pointer;" onclick="' + (m.type === 'cook' ? ('openCookModal(' + m.id + ')') : ('editMeal(' + m.id + ')')) + '">✏️ 编辑</span> <span style="font-size:12px;color:#ff453a;cursor:pointer;" onclick="deleteMeal(' + m.id + ')">🗑️ 删除</span>';
+        return '<div class="record-item" style="align-items:flex-start;"><div style="flex:1;">' +
+          '<div><span class="tag" style="background:var(--orange);color:#fff;">' + mealTypeLabel(m.type) + '</span> <span class="tag">' + escapeHtml(m.meal || '') + '</span> <b>' + escapeHtml(m.name) + (m.cal ? (' · ' + m.cal + ' kcal') : '') + '</b> ' + stars + '</div>' +
+          '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">' + escapeHtml(m.date || '') + (m.feeling ? (' · ' + escapeHtml(m.feeling.slice(0, 30))) : '') + '</div>' +
+          '</div><div style="display:flex;gap:12px;white-space:nowrap;">' + actions + '</div></div>';
+      }).join('');
     }
 
     let cookEditId = null;
     let cookPendingImages = [];
+    let mealEditId = null;
     function openCookModal(id) {
       cookEditId = id || null;
       cookPendingImages = [];
       const m = document.getElementById('cookModal');
       const recipeSel = document.getElementById('cookRecipe');
-      recipeSel.innerHTML = '<option value="">（不关联菜谱）</option>' + (data.diet.recipes || []).map(r => '<option value="' + r.id + '">' + escapeHtml(r.name) + '</option>').join('');
+      recipeSel.innerHTML = '<option value="">（不关联菜谱）</option>' + (data.food.recipes || []).map(r => '<option value="' + r.id + '">' + escapeHtml(r.name) + '</option>').join('');
       document.getElementById('cookImgPreview').innerHTML = '';
       document.getElementById('cookImgCount').textContent = '';
       if (id) {
-        const p = (data.cook?.posts || []).find(x => x.id === id);
+        const p = (data.food.meals || []).find(x => x.id === id);
         if (!p) return;
         document.getElementById('cookModalTitle').textContent = '编辑记录';
-        document.getElementById('cookDish').value = p.dish || '';
+        document.getElementById('cookDish').value = p.name || '';
         document.getElementById('cookDate').value = p.date || todayStr();
         document.getElementById('cookFeeling').value = p.feeling || '';
         recipeSel.value = p.recipeId || '';
@@ -1974,33 +2091,30 @@
       const post = {
         id: cookEditId || Date.now(),
         date: document.getElementById('cookDate').value || todayStr(),
-        dish,
+        meal: '晚餐', type: 'cook',
+        name: dish,
         feeling: document.getElementById('cookFeeling').value.trim(),
         rating: parseInt(document.getElementById('cookRating').value) || 3,
         recipeId: parseInt(document.getElementById('cookRecipe').value) || null,
-        images: cookPendingImages.slice()
+        images: cookPendingImages.slice(),
+        cal: 0
       };
-      if (!data.cook) data.cook = { posts: [] };
       if (cookEditId) {
-        const idx = data.cook.posts.findIndex(x => x.id === cookEditId);
-        if (idx >= 0) data.cook.posts[idx] = post;
+        const idx = (data.food.meals || []).findIndex(x => x.id === cookEditId);
+        if (idx >= 0) data.food.meals[idx] = post;
       } else {
-        data.cook.posts.push(post);
+        if (!data.food.meals) data.food.meals = [];
+        data.food.meals.push(post);
       }
       closeCookModal();
       await saveData();
     }
-    function deleteCookPost(id) {
-      if (!confirm('确定删除这条记录吗？')) return;
-      if (!data.cook) return;
-      data.cook.posts = data.cook.posts.filter(x => x.id !== id);
-      saveData();
-    }
+    function deleteCookPost(id) { deleteMeal(id); }
     function renderAll() {
       renderOverview();
-      renderTodos(); renderDiet(); renderExercise(); renderFinance(); renderBooks(); renderDiary(); renderEnglish();
+      renderTodos(); renderFood(); renderExercise(); renderFinance(); renderBooks(); renderDiary(); renderEnglish();
       renderTaskboard();
-      renderRecipes(); renderPriceItems(); renderProjects(); renderResources(); renderCook(); renderProfile(); renderHelp(); renderWishlist();
+      renderRecipeGrid(); renderPriceItems(); renderProjects(); renderResources(); renderCookFeed(); renderMealLog(); renderProfile(); renderHelp(); renderWishlist();
     }
 
     function renderProfile() {
@@ -2402,7 +2516,7 @@
       document.getElementById('greeting').textContent = (h < 11 ? '早上好' : h < 14 ? '中午好' : h < 19 ? '下午好' : '晚上好') + '，我';
       document.getElementById('dateText').textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
       renderAll();
-      const empty = !data.todos.length && !data.books.length && !data.projects.length && !data.resources.length && !(data.diet.recipes || []).length && !(data.finance.priceItems || []).length;
+      const empty = !data.todos.length && !data.books.length && !data.projects.length && !data.resources.length && !(data.food.recipes || []).length && !(data.finance.priceItems || []).length;
       if (!empty) {
         const b = document.getElementById('importObsidianBtn');
         if (b) { b.disabled = true; document.getElementById('importObsidianHint').textContent = '当前库已有数据，导入按钮已禁用（避免覆盖）'; }
