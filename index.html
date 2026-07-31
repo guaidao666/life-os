@@ -56,16 +56,7 @@
       padding: 20px 12px;
       z-index: 100;
       transition: transform .3s, background .3s;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--text-tertiary) transparent;
     }
-    .sidebar::-webkit-scrollbar { width: 6px; }
-    .sidebar::-webkit-scrollbar-thumb {
-      background: var(--text-tertiary);
-      border-radius: 4px;
-    }
-    .sidebar::-webkit-scrollbar-track { background: transparent; }
     .brand {
       display: flex; align-items: center; gap: 10px;
       padding: 8px 12px 20px;
@@ -89,7 +80,13 @@
     .nav-item.active { background: rgba(175,82,222,.12); color: var(--purple); font-weight: 600; }
     .nav-icon { width: 22px; text-align: center; font-size: 18px; }
     .nav-bottom { padding-top: 10px; border-top: 1px solid var(--border); }
-    .nav { flex: 1; overflow: visible; }
+    .nav { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--text-tertiary) transparent; }
+    .nav::-webkit-scrollbar { width: 6px; }
+    .nav::-webkit-scrollbar-thumb {
+      background: var(--text-tertiary);
+      border-radius: 4px;
+    }
+    .nav::-webkit-scrollbar-track { background: transparent; }
     .nav-group-title {
       font-size: 11px; font-weight: 600; letter-spacing: .08em;
       color: var(--text-tertiary); padding: 14px 14px 4px;
@@ -98,21 +95,44 @@
     [data-theme="dark"] .sidebar { background: #202022; }
     .nav-user {
       display: flex; align-items: center; gap: 10px;
-      margin-top: 10px; padding: 12px 14px;
+      margin-top: 12px; padding: 12px 14px;
       border-top: 1px solid var(--border);
-      background: var(--bg); border-radius: 12px;
+      background: var(--surface);
+      border-radius: 12px;
+      cursor: pointer; flex: 0 0 auto;
+      transition: background .2s; position: relative;
     }
+    .nav-user:hover { background: var(--bg); }
     .nav-user-avatar {
       width: 36px; height: 36px; border-radius: 50%;
       background: var(--purple); color: #fff;
       display: flex; align-items: center; justify-content: center;
       font-size: 15px; font-weight: 600; flex: 0 0 auto;
     }
-    .nav-user-info { flex: 1; line-height: 1.4; min-width: 0; }
-    .nav-user-line { font-size: 12px; color: var(--text-secondary); }
-    .nav-user-num { font-weight: 600; color: var(--text); }
-    .nav-user-level { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-    .nav-user-level span { font-weight: 600; color: var(--purple); }
+    .user-menu {
+      position: absolute; bottom: 84px; left: 12px; right: 12px;
+      background: var(--surface-solid);
+      border: 1px solid var(--border);
+      border-radius: 14px; box-shadow: var(--shadow);
+      padding: 8px; z-index: 200;
+      opacity: 0; visibility: hidden; transform: translateY(8px);
+      transition: opacity .18s, transform .18s, visibility .18s;
+    }
+    .user-menu.open { opacity: 1; visibility: visible; transform: translateY(0); }
+    .user-menu-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: 10px;
+      cursor: pointer; color: var(--text-secondary); font-size: 14px;
+      transition: background .15s, color .15s;
+    }
+    .user-menu-item:hover { background: var(--bg); color: var(--text); }
+    .user-menu-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+    .user-menu-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--text-tertiary); padding: 6px 12px 2px; }
+    .user-menu-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; }
+    .user-menu-label { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-secondary); }
+    .theme-toggle { display: flex; gap: 4px; background: var(--bg); padding: 3px; border-radius: 10px; }
+    .theme-pill { border: none; background: transparent; cursor: pointer; padding: 5px 12px; border-radius: 8px; font-size: 13px; color: var(--text-secondary); transition: all .15s; }
+    .theme-pill.active { background: var(--purple); color: #fff; font-weight: 600; }
     .main {
       flex: 1;
       margin-left: var(--sidebar-width);
@@ -507,10 +527,9 @@
       <nav id="nav">
         <div class="nav-group-title">核心</div>
         <div class="nav-item active" data-section="overview" onclick="showSection('overview')"><span class="nav-icon">🏠</span>总览</div>
-        <div class="nav-item" data-section="profile" onclick="showSection('profile')"><span class="nav-icon">👤</span>个人面板</div>
+        <div class="nav-item" data-section="plan" onclick="showSection('plan')"><span class="nav-icon">☑️</span>每日计划</div>
 
         <div class="nav-group-title">日常记录</div>
-        <div class="nav-item" data-section="plan" onclick="showSection('plan')"><span class="nav-icon">☑️</span>每日计划</div>
         <div class="nav-item" data-section="diet" onclick="showSection('diet')"><span class="nav-icon">🍎</span>饮食记录</div>
         <div class="nav-item" data-section="exercise" onclick="showSection('exercise')"><span class="nav-icon">🏃</span>运动打卡</div>
         <div class="nav-item" data-section="finance" onclick="showSection('finance')"><span class="nav-icon">💰</span>记账存钱</div>
@@ -525,21 +544,26 @@
         <div class="nav-group-title">资料与工具</div>
         <div class="nav-item" data-section="resources" onclick="showSection('resources')"><span class="nav-icon">📁</span>资料库</div>
         <div class="nav-item" data-section="wishlist" onclick="showSection('wishlist')"><span class="nav-icon">⭐</span>星愿清单</div>
-        <div class="nav-item" data-section="help" onclick="showSection('help')"><span class="nav-icon">❓</span>帮助</div>
-
-        <div class="nav-group-title">设置</div>
-        <div class="nav-item" data-section="dev" onclick="showSection('dev')"><span class="nav-icon">🎨</span>外观</div>
       </nav>
-      <div class="nav-bottom">
-        <div class="nav-item" onclick="openWeeklyModal()"><span class="nav-icon">📊</span>周度数据分析</div>
-        <div class="nav-item" onclick="openBackupModal()"><span class="nav-icon">💾</span>数据备份</div>
-      </div>
-      <div class="nav-user">
+      <div class="nav-user" id="navUser" onclick="toggleUserMenu(event)">
         <div class="nav-user-avatar">我</div>
-        <div class="nav-user-info">
-          <div class="nav-user-line"><span class="nav-user-num" id="sideWillpower">—</span> 愿力 · <span class="nav-user-num" id="sideStarwish">—</span> 星愿</div>
-          <div class="nav-user-level">等级 <span id="sideLevel">Lv.7</span></div>
+      </div>
+      <div class="user-menu" id="userMenu">
+        <div class="user-menu-item" onclick="closeUserMenu(); showSection('profile')"><span class="nav-icon">👤</span>个人面板</div>
+        <div class="user-menu-sep"></div>
+        <div class="user-menu-title">设置与工具</div>
+        <div class="user-menu-row">
+          <span class="user-menu-label"><span class="nav-icon">🌗</span>外观</span>
+          <div class="theme-toggle">
+            <button type="button" class="theme-pill" id="pillLight" onclick="event.stopPropagation(); setTheme('light')">浅色</button>
+            <button type="button" class="theme-pill" id="pillDark" onclick="event.stopPropagation(); setTheme('dark')">深色</button>
+          </div>
         </div>
+        <div class="user-menu-item" onclick="closeUserMenu(); showSection('dev')"><span class="nav-icon">🎨</span>开发者工具</div>
+        <div class="user-menu-item" onclick="closeUserMenu(); openBackupModal()"><span class="nav-icon">💾</span>数据备份</div>
+        <div class="user-menu-item" onclick="closeUserMenu(); openWeeklyModal()"><span class="nav-icon">📊</span>周度数据分析</div>
+        <div class="user-menu-sep"></div>
+        <div class="user-menu-item" onclick="closeUserMenu(); showSection('help')"><span class="nav-icon">❓</span>帮助文档</div>
       </div>
     </aside>
 
@@ -1184,9 +1208,15 @@
       document.getElementById('themeBtn').textContent = t.dark ? '☀️' : '🌙';
       document.getElementById('darkToggle').classList.toggle('on', t.dark);
       Object.entries(t.colors).forEach(([k,v]) => { const el = document.getElementById('c-' + k); if (el) el.value = v; });
+      updateThemePills();
     }
     function toggleTheme() {
       data.theme.dark = !data.theme.dark;
+      applyTheme();
+      saveData();
+    }
+    function setTheme(mode) {
+      data.theme.dark = (mode === 'dark');
       applyTheme();
       saveData();
     }
@@ -1866,13 +1896,30 @@
         .map(k => `<div class="cult-row"><span class="cult-key">${labels[k]}</span><span class="cult-val">${realms[k]}</span></div>`).join('');
     }
 
-    function renderSidebarUser() {
-      const p = (data && data.player) || {};
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-      set('sideWillpower', Number(p.willpower) || 0);
-      set('sideStarwish', Number(p.starwish) || 0);
-      set('sideLevel', 'Lv.' + (Number(p.level) || 1));
+    function updateThemePills() {
+      const dark = !!(data.theme && data.theme.dark);
+      const light = document.getElementById('pillLight');
+      const darkEl = document.getElementById('pillDark');
+      if (light) light.classList.toggle('active', !dark);
+      if (darkEl) darkEl.classList.toggle('active', dark);
     }
+    function toggleUserMenu(e) {
+      if (e) e.stopPropagation();
+      const m = document.getElementById('userMenu');
+      if (m) m.classList.toggle('open');
+    }
+    function closeUserMenu() {
+      const m = document.getElementById('userMenu');
+      if (m) m.classList.remove('open');
+    }
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('userMenu');
+      const user = document.getElementById('navUser');
+      if (menu && menu.classList.contains('open') &&
+          !menu.contains(e.target) && e.target !== user && !(user && user.contains(e.target))) {
+        menu.classList.remove('open');
+      }
+    });
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
     function boldMd(s) { return String(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'); }
@@ -2019,7 +2066,7 @@
       const dt = document.getElementById('overviewDate');
       if (dt) dt.textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-      renderSidebarUser();
+      updateThemePills();
     }
 
     async function importObsidian() {
