@@ -488,6 +488,17 @@
     .cult-row { display: flex; justify-content: space-between; font-size: 13px; padding: 8px 12px; background: var(--bg); border-radius: 8px; }
     .cult-key { color: var(--text-secondary); }
     .cult-val { font-weight: 500; }
+    .reward-log { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+    .rl-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 7px 10px; background: var(--bg); border-radius: 8px; border-left: 3px solid transparent; }
+    .rl-row.rl-plus { border-left-color: #2e9e5b; }
+    .rl-row.rl-minus { border-left-color: #d9534f; }
+    .rl-src { flex: 0 0 auto; font-size: 11px; color: #fff; background: var(--purple); border-radius: 6px; padding: 1px 6px; }
+    .rl-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rl-amt { flex: 0 0 auto; font-weight: 600; color: var(--text); }
+    .rl-plus .rl-amt { color: #2e9e5b; }
+    .rl-minus .rl-amt { color: #d9534f; }
+    .rl-bal { flex: 0 0 auto; color: var(--text-secondary); font-size: 12px; }
+    .rl-time { flex: 0 0 auto; color: var(--text-tertiary); font-size: 11px; }
     @media (max-width: 560px) {
       .profile-currency { grid-template-columns: 1fr; }
     }
@@ -519,7 +530,8 @@
   .tb-group-title .tb-caret { transition:transform .2s; font-size:12px; opacity:.6; }
   .tb-group.collapsed .tb-group-title .tb-caret { transform:rotate(-90deg); }
   .tb-count { font-size:12px; color:var(--text-secondary); background:var(--surface); border:1px solid var(--border); padding:2px 9px; border-radius:999px; white-space:nowrap; }
-  .tb-group-body { padding:4px 16px 14px; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:2px 18px; }
+  .tb-group-body { padding:4px 16px 14px; display:flex; gap:0 18px; }
+  .tb-col { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
   .tb-group.collapsed .tb-group-body { display:none; }
   .tb-item { display:flex; align-items:center; gap:10px; padding:8px 8px; border-radius:8px; cursor:pointer; transition:background .15s; }
   .tb-item:hover { background:rgba(175,82,222,0.08); }
@@ -666,7 +678,6 @@
               <input class="input" id="tbNewText" placeholder="新任务内容..." onkeypress="if(event.key==='Enter')addTask()">
               <select class="input" id="tbNewGrp" onchange="syncTbPoints()">
                 <option value="日级任务栏 +1">日级</option>
-                <option value="周级任务栏 +10">周级</option>
                 <option value="长期任务栏 +？">长期</option>
               </select>
               <input class="input" id="tbNewPoints" type="number" value="1" style="width:72px;" placeholder="愿力点">
@@ -725,6 +736,10 @@
             <div class="profile-block">
               <div class="profile-block-title">修仙 · 心境法</div>
               <div class="profile-cult" id="pRealms"></div>
+            </div>
+            <div class="profile-block">
+              <div class="profile-block-title">📜 最近明细 · 愿力流水</div>
+              <div id="rewardLogWrap" class="reward-log"></div>
             </div>
             <div class="profile-block">
               <div class="profile-block-title">快捷入口</div>
@@ -1953,6 +1968,25 @@
       const rEl = document.getElementById('pRealms');
       if (rEl) rEl.innerHTML = Object.keys(labels).filter(k => realms[k] !== undefined)
         .map(k => `<div class="cult-row"><span class="cult-key">${labels[k]}</span><span class="cult-val">${realms[k]}</span></div>`).join('');
+      const rl = document.getElementById('rewardLogWrap');
+      if (rl) {
+        const logs = (data && data.rewardLog) || [];
+        if (!logs.length) { rl.innerHTML = '<div class="empty-state">暂无记录，勾选任务或完成行为后会自动记一笔</div>'; }
+        else {
+          rl.innerHTML = logs.map(e => {
+            const d = new Date(e.ts || Date.now());
+            const hh = String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+            const sign = e.dw > 0 ? '+' : '';
+            const cls = e.dw > 0 ? 'rl-plus' : (e.dw < 0 ? 'rl-minus' : '');
+            const amt = (e.dw !== 0) ? `${sign}${e.dw} 愿力` : '';
+            const amtSw = (e.dsw !== 0) ? ` / ${e.dsw > 0 ? '+' : ''}${e.dsw} ⭐` : '';
+            const bal = `余额 ${e.bw != null ? e.bw : '?'} 愿力`;
+            const src = e.source ? `<span class="rl-src">${esc(e.source)}</span>` : '';
+            const txt = e.text ? esc(e.text) : '<span class="muted">（无备注）</span>';
+            return `<div class="rl-row ${cls}">${src}<span class="rl-text">${txt}</span><span class="rl-amt">${amt}${amtSw}</span><span class="rl-bal">${bal}</span><span class="rl-time">${hh}</span></div>`;
+          }).join('');
+        }
+      }
     }
 
     function updateThemePills() {
@@ -2045,6 +2079,11 @@
           ${tbEditMode ? `<button type="button" class="tb-del-btn" onclick="deleteTask(${t.id})" title="删除">✕</button>` : ''}
         </label>`;
       };
+      const colHtml = (items) => {
+        const mid = Math.ceil(items.length / 2);
+        const col = (arr) => `<div class="tb-col">${arr.map(itemHtml).join('')}</div>`;
+        return col(items.slice(0, mid)) + col(items.slice(mid));
+      };
       const groupHtml = Object.keys(groups).map(g => {
         const gItems = groups[g] || [];
         const collapsed = gItems.length && !/日级/.test(g) ? ' collapsed' : '';
@@ -2053,7 +2092,7 @@
             <div class="tb-group-title"><span class="tb-caret">▾</span>${esc(g)}</div>
             <span class="tb-count">${gItems.length}</span>
           </div>
-          <div class="tb-group-body" ondragover="tbDragOver(event)" ondrop="tbDropGroup(event, '${esc(g)}')">${gItems.map(itemHtml).join('')}</div>
+          <div class="tb-group-body" ondragover="tbDragOver(event)" ondrop="tbDropGroup(event, '${esc(g)}')">${colHtml(gItems)}</div>
         </div>`;
       }).join('');
       const completedHtml = doneTasks.length ? `
@@ -2062,7 +2101,7 @@
             <div class="tb-group-title"><span class="tb-caret">▾</span>✅ 已完成 (${doneTasks.length})</div>
             <span class="tb-count">${doneTasks.length}</span>
           </div>
-          <div class="tb-group-body">${doneTasks.map(itemHtml).join('')}</div>
+          <div class="tb-group-body">${colHtml(doneTasks)}</div>
         </div>` : '';
       wrap.innerHTML = groupHtml + completedHtml;
     }
@@ -2084,7 +2123,7 @@
     function syncTbPoints() {
       const g = document.getElementById('tbNewGrp').value;
       const p = document.getElementById('tbNewPoints');
-      if (/周级/.test(g)) p.value = 10; else p.value = 1;
+      p.value = 1;
     }
 
     function addTask() {
@@ -2126,8 +2165,20 @@
           if (!j.ok) { console.warn('taskboard update failed', j); return; }
           const delta = done ? (points || 0) : -(points || 0);
           if (delta !== 0 && data.player) {
-            fetch('/api/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ willpower: delta }) })
-              .then(r => r.json()).then(j2 => { if (j2.ok && data.player) data.player.willpower = j2.willpower; })
+            fetch('/api/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ willpower: delta, source: done ? '任务完成' : '任务取消', text: (t && t.text) || '' }) })
+              .then(r => r.json()).then(j2 => {
+                if (j2.ok && j2.player) {
+                  data.player = Object.assign({}, data.player, j2.player);
+                  if (!data.rewardLog) data.rewardLog = [];
+                  data.rewardLog.unshift({
+                    id: Date.now(), ts: new Date().toISOString(),
+                    source: done ? '任务完成' : '任务取消',
+                    text: (t && t.text) || '', dw: delta, dsw: 0, bw: j2.player.willpower, bsw: j2.player.starwish
+                  });
+                  if (data.rewardLog.length > 50) data.rewardLog.length = 50;
+                  if (typeof renderProfile === 'function') renderProfile();
+                }
+              })
               .catch(e => console.warn('reward error', e));
           }
         }).catch(e => console.warn('taskboard error', e));

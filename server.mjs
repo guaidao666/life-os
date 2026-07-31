@@ -47,6 +47,10 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS wishlist (id INTEGER PRIMARY KEY, name TEXT, required_stars REAL, done INTEGER DEFAULT 0, note TEXT);
   CREATE TABLE IF NOT EXISTS taskboard (id INTEGER PRIMARY KEY, grp TEXT, text TEXT, depth INTEGER DEFAULT 0, done INTEGER DEFAULT 0, points INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS diary (id INTEGER PRIMARY KEY, date TEXT, title TEXT, content TEXT, mood TEXT, created_at TEXT);
+  CREATE TABLE IF NOT EXISTS reward_log (
+    id INTEGER PRIMARY KEY, ts TEXT, source TEXT, text TEXT,
+    dw REAL DEFAULT 0, dsw REAL DEFAULT 0, bw REAL DEFAULT 0, bsw REAL DEFAULT 0
+  );
 `);
 
 // 迁移：taskboard 增加 done_at（记录完成时间，用于日/周自动刷新）
@@ -125,6 +129,9 @@ function readData() {
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
 
+  const rewardLog = db.prepare('SELECT id,ts,source,text,dw,dsw,bw,bsw FROM reward_log ORDER BY ts DESC, id DESC LIMIT 50').all()
+    .map(r => ({ id: r.id, ts: r.ts || '', source: r.source || '', text: r.text || '', dw: r.dw || 0, dsw: r.dsw || 0, bw: r.bw || 0, bsw: r.bsw || 0 }));
+
   const pRow = db.prepare('SELECT willpower,starwish,contract,level,skills,realms FROM player_stats WHERE id=1').get();
   const player = pRow ? {
     willpower: pRow.willpower, starwish: pRow.starwish, contract: pRow.contract, level: pRow.level,
@@ -151,6 +158,7 @@ function readData() {
     player,
     taskboard,
     diary,
+    rewardLog,
     theme
   };
 }
@@ -467,7 +475,7 @@ const server = http.createServer(async (req, res) => {
   const INSERT_TABLES = new Set([
     'todos','diet_logs','recipes','exercises','finances','price_items',
     'books','book_notes','english_words','projects','resources','cook_posts',
-    'help_docs','wishlist','taskboard','diary'
+    'help_docs','wishlist','taskboard','diary','reward_log'
   ]);
   const getCols = (t) => db.prepare('PRAGMA table_info(' + t + ')').all().map(r => r.name);
   const normVal = (v) => {
@@ -617,7 +625,8 @@ const server = http.createServer(async (req, res) => {
         const p = JSON.parse(body);
         const cur = db.prepare('SELECT willpower,starwish,contract,level FROM player_stats WHERE id=1').get();
         if (!cur) throw new Error('player_stats 未初始化');
-        const next = { willpower: Number(cur.willpower) || 0, starwish: Number(cur.starwish) || 0, contract: Number(cur.contract) || 0, level: Number(cur.level) || 1 };
+        const prev = { willpower: Number(cur.willpower) || 0, starwish: Number(cur.starwish) || 0, contract: Number(cur.contract) || 0, level: Number(cur.level) || 1 };
+        const next = { ...prev };
         for (const f of REWARD_FIELDS) {
           if (typeof p[f] === 'number') {
             next[f] = Math.max(0, (next[f] || 0) + p[f]);
@@ -625,6 +634,15 @@ const server = http.createServer(async (req, res) => {
         }
         db.prepare('UPDATE player_stats SET willpower=?,starwish=?,contract=?,level=? WHERE id=1')
           .run(next.willpower, next.starwish, next.contract, next.level);
+        // 写流水账：仅在有数值变动时记录
+        const dw = next.willpower - prev.willpower;
+        const dsw = next.starwish - prev.starwish;
+        if (dw !== 0 || dsw !== 0) {
+          try {
+            db.prepare('INSERT INTO reward_log (ts,source,text,dw,dsw,bw,bsw) VALUES (?,?,?,?,?,?,?)')
+              .run(new Date().toISOString(), p.source || '其他', p.text || '', dw, dsw, next.willpower, next.starwish);
+          } catch (le) { /* 流水写入失败不影响主流程 */ }
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, player: next }));
       } catch (e) {
