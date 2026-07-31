@@ -77,9 +77,33 @@
       font-size: 15px;
     }
     .nav-item:hover { background: var(--bg); color: var(--text); }
-    .nav-item.active { background: var(--purple); color: #fff; }
+    .nav-item.active { background: rgba(175,82,222,.12); color: var(--purple); font-weight: 600; }
     .nav-icon { width: 22px; text-align: center; font-size: 18px; }
-    .nav-bottom { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+    .nav-bottom { padding-top: 10px; border-top: 1px solid var(--border); }
+    .nav { flex: 1; overflow-y: auto; }
+    .nav-group-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .08em;
+      color: var(--text-tertiary); padding: 14px 14px 4px;
+    }
+    .sidebar { background: #f6f6f8; }
+    [data-theme="dark"] .sidebar { background: #202022; }
+    .nav-user {
+      display: flex; align-items: center; gap: 10px;
+      margin-top: 10px; padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg); border-radius: 12px;
+    }
+    .nav-user-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--purple); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 600; flex: 0 0 auto;
+    }
+    .nav-user-info { flex: 1; line-height: 1.4; min-width: 0; }
+    .nav-user-line { font-size: 12px; color: var(--text-secondary); }
+    .nav-user-num { font-weight: 600; color: var(--text); }
+    .nav-user-level { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .nav-user-level span { font-weight: 600; color: var(--purple); }
     .main {
       flex: 1;
       margin-left: var(--sidebar-width);
@@ -368,6 +392,33 @@
     .ov-val { font-size: 26px; font-weight: 600; margin-top: 4px; }
     .ov-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
 
+    /* 今日工作台 */
+    .today-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; margin-top: 4px; }
+    .today-stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .today-stat-val { font-size: 26px; font-weight: 700; color: var(--text); }
+    .today-stat-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+    .today-stat-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+    .today-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+    .today-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+    .today-panel-title { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; }
+    .today-todo { display: flex; flex-direction: column; gap: 2px; }
+    .today-todo-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background .15s; }
+    .today-todo-item:hover { background: var(--bg); }
+    .today-todo-item input { width: 16px; height: 16px; accent-color: var(--purple); }
+    .today-empty { color: var(--text-tertiary); font-size: 14px; padding: 12px 4px; }
+    .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .quick-btn { padding: 14px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); cursor: pointer; font-size: 14px; color: var(--text); transition: all .15s; }
+    .quick-btn:hover { border-color: var(--purple); color: var(--purple); background: rgba(175,82,222,.06); }
+    .module-grid-title { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin: 24px 0 12px; }
+    .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+    .module-chip { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all .15s; }
+    .module-chip:hover { transform: translateY(-2px); border-color: var(--purple); box-shadow: 0 6px 18px rgba(0,0,0,.06); }
+    .module-chip-icon { font-size: 26px; }
+    .module-chip-title { font-size: 13px; color: var(--text-secondary); }
+    @media (max-width: 640px) {
+      .today-cols { grid-template-columns: 1fr; }
+    }
+
     .profile-wrap { max-width: 720px; }
     .profile-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
     .profile-head { display: flex; align-items: center; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
@@ -434,25 +485,41 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="brand-dot"></div>人生管理系统</div>
       <nav id="nav">
+        <div class="nav-group-title">核心</div>
         <div class="nav-item active" data-section="overview" onclick="showSection('overview')"><span class="nav-icon">🏠</span>总览</div>
         <div class="nav-item" data-section="profile" onclick="showSection('profile')"><span class="nav-icon">👤</span>个人面板</div>
-        <div class="nav-item" data-section="help" onclick="showSection('help')"><span class="nav-icon">❓</span>帮助</div>
-        <div class="nav-item" data-section="wishlist" onclick="showSection('wishlist')"><span class="nav-icon">⭐</span>星愿清单</div>
+
+        <div class="nav-group-title">日常记录</div>
         <div class="nav-item" data-section="plan" onclick="showSection('plan')"><span class="nav-icon">☑️</span>每日计划</div>
         <div class="nav-item" data-section="diet" onclick="showSection('diet')"><span class="nav-icon">🍎</span>饮食记录</div>
         <div class="nav-item" data-section="exercise" onclick="showSection('exercise')"><span class="nav-icon">🏃</span>运动打卡</div>
         <div class="nav-item" data-section="finance" onclick="showSection('finance')"><span class="nav-icon">💰</span>记账存钱</div>
-        <div class="nav-item" data-section="books" onclick="showSection('books')"><span class="nav-icon">📚</span>读书收获</div>
         <div class="nav-item" data-section="mood" onclick="showSection('mood')"><span class="nav-icon">😊</span>心情记录</div>
-        <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="nav-icon">🎯</span>项目/目标</div>
-        <div class="nav-item" data-section="resources" onclick="showSection('resources')"><span class="nav-icon">📁</span>资料库</div>
-        <div class="nav-item" data-section="cook" onclick="showSection('cook')"><span class="nav-icon">🍳</span>烟火食记</div>
+
+        <div class="nav-group-title">成长积累</div>
+        <div class="nav-item" data-section="books" onclick="showSection('books')"><span class="nav-icon">📚</span>读书收获</div>
         <div class="nav-item" data-section="english" onclick="showSection('english')"><span class="nav-icon">🔤</span>英语学习</div>
-        <div class="nav-item" data-section="dev" onclick="showSection('dev')"><span class="nav-icon">🎨</span>开发者</div>
+        <div class="nav-item" data-section="cook" onclick="showSection('cook')"><span class="nav-icon">🍳</span>烟火食记</div>
+        <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="nav-icon">🎯</span>项目/目标</div>
+
+        <div class="nav-group-title">资料与工具</div>
+        <div class="nav-item" data-section="resources" onclick="showSection('resources')"><span class="nav-icon">📁</span>资料库</div>
+        <div class="nav-item" data-section="wishlist" onclick="showSection('wishlist')"><span class="nav-icon">⭐</span>星愿清单</div>
+        <div class="nav-item" data-section="help" onclick="showSection('help')"><span class="nav-icon">❓</span>帮助</div>
+
+        <div class="nav-group-title">设置</div>
+        <div class="nav-item" data-section="dev" onclick="showSection('dev')"><span class="nav-icon">🎨</span>外观</div>
       </nav>
       <div class="nav-bottom">
         <div class="nav-item" onclick="openWeeklyModal()"><span class="nav-icon">📊</span>周度数据分析</div>
         <div class="nav-item" onclick="openBackupModal()"><span class="nav-icon">💾</span>数据备份</div>
+      </div>
+      <div class="nav-user">
+        <div class="nav-user-avatar">我</div>
+        <div class="nav-user-info">
+          <div class="nav-user-line"><span class="nav-user-num" id="sideWillpower">—</span> 愿力 · <span class="nav-user-num" id="sideStarwish">—</span> 星愿</div>
+          <div class="nav-user-level">等级 <span id="sideLevel">Lv.7</span></div>
+        </div>
       </div>
     </aside>
 
@@ -478,7 +545,27 @@
           </div>
           <div class="overview-date" id="overviewDate"></div>
         </div>
-        <div class="overview-grid" id="overviewGrid"></div>
+
+        <div class="today-stats" id="todayStats"></div>
+
+        <div class="today-cols">
+          <div class="today-panel">
+            <div class="today-panel-title">今日要做</div>
+            <div class="today-todo" id="todayTodo"></div>
+          </div>
+          <div class="today-panel">
+            <div class="today-panel-title">快速记录</div>
+            <div class="quick-grid">
+              <button class="quick-btn" onclick="showSection('finance')">💰 记一笔</button>
+              <button class="quick-btn" onclick="showSection('diet')">🍎 记一餐</button>
+              <button class="quick-btn" onclick="showSection('exercise')">🏃 记运动</button>
+              <button class="quick-btn" onclick="showSection('mood')">😊 记心情</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="module-grid-title">常用入口</div>
+        <div class="module-grid" id="moduleGrid"></div>
       </section>
 
       <!-- 0.5 个人面板 -->
@@ -1759,6 +1846,14 @@
         .map(k => `<div class="cult-row"><span class="cult-key">${labels[k]}</span><span class="cult-val">${realms[k]}</span></div>`).join('');
     }
 
+    function renderSidebarUser() {
+      const p = (data && data.player) || {};
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('sideWillpower', Number(p.willpower) || 0);
+      set('sideStarwish', Number(p.starwish) || 0);
+      set('sideLevel', 'Lv.' + (Number(p.level) || 1));
+    }
+
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
     function boldMd(s) { return String(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'); }
 
@@ -1841,65 +1936,70 @@
     function renderOverview() {
       const d = data;
       const today = todayStr();
-      const ym = today.slice(0, 7);
-      const week = weekDates();
       const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
 
       const todoTotal = (d.todos || []).length;
       const todoDone = (d.todos || []).filter(t => t.done).length;
 
       const dietToday = sum((d.diet.logs || []).filter(l => l.date === today), l => Number(l.cal) || 0);
-      const dietGoal = d.diet.goal || 2000;
-
       const exTodayMin = sum((d.exercise.logs || []).filter(l => l.date === today), l => Number(l.min) || 0);
 
       const finRecords = d.finance.records || [];
       const expToday = sum(finRecords.filter(r => r.date === today && r.type === 'expense'), r => Number(r.amount) || 0);
-      const monthExpense = sum(finRecords.filter(r => r.date.startsWith(ym) && r.type === 'expense'), r => Number(r.amount) || 0);
-      const monthIncome = sum(finRecords.filter(r => r.date.startsWith(ym) && r.type === 'income'), r => Number(r.amount) || 0);
-
-      const books = d.books || [];
-      const readPages = sum(books, b => Number(b.read) || 0);
-      const totalPages = sum(books, b => Number(b.pages) || 0);
 
       const moodLogs = d.mood.logs || [];
       const todayMood = moodLogs.filter(m => m.date === today).slice(-1)[0];
       const moodVal = todayMood ? todayMood.mood : (moodLogs.slice(-1)[0] ? moodLogs.slice(-1)[0].mood : null);
 
-      const projects = d.projects || [];
-      const resources = d.resources || [];
-
-      const cookWeek = (d.cook.posts || []).filter(p => week.includes(p.date)).length;
-
-      const enWords = (d.english.words || []).filter(w => w.date === today).length;
-      const enGoal = d.english.dailyGoal || 20;
-
-      const cards = [
-        { sec: 'plan', icon: '☑️', title: '每日计划', val: todoTotal ? (todoDone + '/' + todoTotal) : '0', sub: '待办完成' },
-        { sec: 'diet', icon: '🍎', title: '饮食记录', val: dietToday + '', sub: '今日摄入 kcal' },
-        { sec: 'exercise', icon: '🏃', title: '运动打卡', val: exTodayMin + '', sub: '今日运动(分)' },
-        { sec: 'finance', icon: '💰', title: '记账存钱', val: '¥' + (Math.round(expToday * 10) / 10), sub: '今日支出' },
-        { sec: 'books', icon: '📚', title: '读书收获', val: readPages + '', sub: '累计阅读页' },
-        { sec: 'mood', icon: '😊', title: '心情记录', val: moodVal != null ? (moodVal + '/5') : '—', sub: '今日心情' },
-        { sec: 'projects', icon: '🎯', title: '项目/目标', val: projects.length + '', sub: '进行中' },
-        { sec: 'resources', icon: '📁', title: '资料库', val: resources.length + '', sub: '资料数' },
-        { sec: 'cook', icon: '🍳', title: '烟火食记', val: cookWeek + '', sub: '本周做菜' },
-        { sec: 'english', icon: '🔤', title: '英语学习', val: enWords + '/' + enGoal, sub: '今日单词' },
-        { sec: 'dev', icon: '🎨', title: '开发者', val: '配色', sub: '点击查看' }
+      // 今日概览：一行关键数字
+      const stats = [
+        { label: '待办', val: todoTotal ? (todoDone + '/' + todoTotal) : '0/0', sub: '完成/总数' },
+        { label: '今日支出', val: '¥' + (Math.round(expToday * 10) / 10), sub: '记账' },
+        { label: '今日摄入', val: dietToday + '', sub: 'kcal' },
+        { label: '今日运动', val: exTodayMin + '', sub: '分钟' },
+        { label: '今日心情', val: moodVal != null ? (moodVal + '/5') : '—', sub: '心情' }
       ];
+      const ts = document.getElementById('todayStats');
+      if (ts) ts.innerHTML = stats.map(s => `
+        <div class="today-stat">
+          <div class="today-stat-val">${s.val}</div>
+          <div class="today-stat-label">${s.label}</div>
+          <div class="today-stat-sub">${s.sub}</div>
+        </div>`).join('');
 
-      const grid = document.getElementById('overviewGrid');
-      if (!grid) return;
-      grid.innerHTML = cards.map(c => `
-        <div class="ov-card" onclick="showSection('${c.sec}')">
-          <div class="ov-icon">${c.icon}</div>
-          <div class="ov-title">${c.title}</div>
-          <div class="ov-val">${c.val}</div>
-          <div class="ov-sub">${c.sub}</div>
+      // 今日要做：最近的未完成任务（带复选框，勾选即完成）
+      const pending = (d.todos || []).filter(t => !t.done).slice(0, 6);
+      const td = document.getElementById('todayTodo');
+      if (td) {
+        td.innerHTML = pending.length
+          ? pending.map(t => `
+            <label class="today-todo-item">
+              <input type="checkbox" onchange="toggleTodo(${t.id})">
+              <span>${escapeHtml(t.text || '')}</span>
+            </label>`).join('')
+          : '<div class="today-empty">今日计划都完成啦 🎉</div>';
+      }
+
+      // 常用入口
+      const modules = [
+        { sec: 'plan', icon: '☑️', title: '每日计划' },
+        { sec: 'diet', icon: '🍎', title: '饮食记录' },
+        { sec: 'exercise', icon: '🏃', title: '运动打卡' },
+        { sec: 'finance', icon: '💰', title: '记账存钱' },
+        { sec: 'mood', icon: '😊', title: '心情记录' },
+        { sec: 'books', icon: '📚', title: '读书收获' }
+      ];
+      const mg = document.getElementById('moduleGrid');
+      if (mg) mg.innerHTML = modules.map(m => `
+        <div class="module-chip" onclick="showSection('${m.sec}')">
+          <span class="module-chip-icon">${m.icon}</span>
+          <span class="module-chip-title">${m.title}</span>
         </div>`).join('');
 
       const dt = document.getElementById('overviewDate');
       if (dt) dt.textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+      renderSidebarUser();
     }
 
     async function importObsidian() {
