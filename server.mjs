@@ -42,6 +42,17 @@ db.exec(`
     id INTEGER PRIMARY KEY, date TEXT, meal TEXT, type TEXT, recipe_id INTEGER,
     name TEXT, cal INTEGER DEFAULT 0, images TEXT, feeling TEXT, rating INTEGER DEFAULT 0, created_at TEXT
   );
+  CREATE TABLE IF NOT EXISTS menus (
+    id INTEGER PRIMARY KEY, date TEXT, name TEXT, people INTEGER DEFAULT 1,
+    scene TEXT, taste TEXT, complexity TEXT, items TEXT, created_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS shopping_items (
+    id INTEGER PRIMARY KEY, menu_id INTEGER, name TEXT, category TEXT,
+    qty TEXT, unit TEXT, checked INTEGER DEFAULT 0, note TEXT
+  );
+  CREATE TABLE IF NOT EXISTS pantry (
+    id INTEGER PRIMARY KEY, name TEXT, category TEXT, qty TEXT, unit TEXT, note TEXT
+  );
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
   CREATE TABLE IF NOT EXISTS player_stats (
     id INTEGER PRIMARY KEY, willpower REAL DEFAULT 0, starwish REAL DEFAULT 0,
@@ -152,6 +163,13 @@ function readData() {
   const rewardLog = db.prepare('SELECT id,ts,source,text,dw,dsw,bw,bsw FROM reward_log ORDER BY ts DESC, id DESC LIMIT 50').all()
     .map(r => ({ id: r.id, ts: r.ts || '', source: r.source || '', text: r.text || '', dw: r.dw || 0, dsw: r.dsw || 0, bw: r.bw || 0, bsw: r.bsw || 0 }));
 
+  const menus = db.prepare('SELECT id,date,name,people,scene,taste,complexity,items,created_at FROM menus ORDER BY created_at DESC, id DESC').all()
+    .map(r => ({ id: r.id, date: r.date || '', name: r.name || '', people: r.people || 1, scene: r.scene || '', taste: r.taste || '', complexity: r.complexity || '', items: r.items ? safeParse(r.items, []) : [], createdAt: r.created_at || '' }));
+  const shopping = db.prepare('SELECT id,menu_id,name,category,qty,unit,checked,note FROM shopping_items').all()
+    .map(r => ({ id: r.id, menuId: r.menu_id, name: r.name || '', category: r.category || '其他', qty: r.qty || '', unit: r.unit || '', checked: !!r.checked, note: r.note || '' }));
+  const pantry = db.prepare('SELECT id,name,category,qty,unit,note FROM pantry').all()
+    .map(r => ({ id: r.id, name: r.name || '', category: r.category || '其他', qty: r.qty || '', unit: r.unit || '', note: r.note || '' }));
+
   const pRow = db.prepare('SELECT willpower,starwish,contract,level,skills,realms FROM player_stats WHERE id=1').get();
   const player = pRow ? {
     willpower: pRow.willpower, starwish: pRow.starwish, contract: pRow.contract, level: pRow.level,
@@ -165,7 +183,7 @@ function readData() {
 
   return {
     todos,
-    food: { meals, goal: dietGoal, recipes },
+    food: { meals, goal: dietGoal, recipes, menus, shopping, pantry },
     exercise: { logs: exercises },
     finance: { records: fin, priceItems },
     books,
@@ -185,7 +203,7 @@ function readData() {
 function writeData(obj) {
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM meals; DELETE FROM settings;');
+    db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM meals; DELETE FROM menus; DELETE FROM shopping_items; DELETE FROM pantry; DELETE FROM settings;');
     const insTodo = db.prepare('INSERT INTO todos (id,text,priority,done,points) VALUES (?,?,?,?,?)');
     (obj.todos || []).forEach(t => insTodo.run(t.id, t.text, t.priority, t.done ? 1 : 0, t.points || 1));
     const insRecipe = db.prepare('INSERT INTO recipes (id,name,category,cost,steps,source,time,difficulty,ingredients,tags,image) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
@@ -214,6 +232,12 @@ function writeData(obj) {
     insSet.run('diet_goal', String(obj.food?.goal ?? 2000));
     insSet.run('english_goal', String(obj.english?.dailyGoal ?? 20));
     insSet.run('theme', JSON.stringify(obj.theme || defaultTheme));
+    const insMenu = db.prepare('INSERT INTO menus (id,date,name,people,scene,taste,complexity,items,created_at) VALUES (?,?,?,?,?,?,?,?,?)');
+    (obj.food?.menus || []).forEach(m => insMenu.run(m.id, m.date || new Date().toISOString().slice(0,10), m.name || '一桌菜', m.people || 1, m.scene || '', m.taste || '', m.complexity || '', JSON.stringify(m.items || []), m.createdAt || new Date().toISOString()));
+    const insShop = db.prepare('INSERT INTO shopping_items (id,menu_id,name,category,qty,unit,checked,note) VALUES (?,?,?,?,?,?,?,?)');
+    (obj.food?.shopping || []).forEach(s => insShop.run(s.id, s.menuId || null, s.name || '', s.category || '其他', s.qty || '', s.unit || '', s.checked ? 1 : 0, s.note || ''));
+    const insPantry = db.prepare('INSERT INTO pantry (id,name,category,qty,unit,note) VALUES (?,?,?,?,?,?)');
+    (obj.food?.pantry || []).forEach(p => insPantry.run(p.id, p.name || '', p.category || '其他', p.qty || '', p.unit || '', p.note || ''));
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -365,6 +389,9 @@ const CSV_TABLES = {
   english_words: { label: '英语单词', cols: [['id','ID'],['word','单词'],['meaning','释义'],['date','日期'],['review','复习次数']] },
   projects:      { label: '项目目标', cols: [['id','ID'],['title','标题'],['type','类型'],['source','来源'],['content','内容'],['done','完成']] },
   resources:     { label: '资料库',   cols: [['id','ID'],['title','标题'],['source','来源'],['summary','摘要']] },
+  menus:         { label: '餐桌规划', cols: [['id','ID'],['date','日期'],['name','名称'],['people','人数'],['scene','场景'],['taste','口味'],['complexity','复杂度'],['items','菜品']] },
+  shopping_items:{ label: '采购清单', cols: [['id','ID'],['menu_id','菜单ID'],['name','名称'],['category','分类'],['qty','数量'],['unit','单位'],['checked','已购'],['note','备注']] },
+  pantry:        { label: '我的冰箱', cols: [['id','ID'],['name','名称'],['category','分类'],['qty','数量'],['unit','单位'],['note','备注']] },
 };
 
 function toCSV(rows, cols) {
@@ -491,7 +518,8 @@ const server = http.createServer(async (req, res) => {
   const INSERT_TABLES = new Set([
     'todos','recipes','meals','exercises','finances','price_items',
     'books','book_notes','english_words','projects','resources',
-    'help_docs','wishlist','taskboard','diary','reward_log'
+    'help_docs','wishlist','taskboard','diary','reward_log',
+    'menus','shopping_items','pantry'
   ]);
   const getCols = (t) => db.prepare('PRAGMA table_info(' + t + ')').all().map(r => r.name);
   const normVal = (v) => {
