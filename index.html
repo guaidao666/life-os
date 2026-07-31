@@ -519,7 +519,7 @@
   .tb-group-title .tb-caret { transition:transform .2s; font-size:12px; opacity:.6; }
   .tb-group.collapsed .tb-group-title .tb-caret { transform:rotate(-90deg); }
   .tb-count { font-size:12px; color:var(--text-secondary); background:var(--surface); border:1px solid var(--border); padding:2px 9px; border-radius:999px; white-space:nowrap; }
-  .tb-group-body { padding:4px 16px 14px; display:flex; flex-direction:column; }
+  .tb-group-body { padding:4px 16px 14px; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:2px 18px; }
   .tb-group.collapsed .tb-group-body { display:none; }
   .tb-item { display:flex; align-items:center; gap:10px; padding:8px 8px; border-radius:8px; cursor:pointer; transition:background .15s; }
   .tb-item:hover { background:rgba(175,82,222,0.08); }
