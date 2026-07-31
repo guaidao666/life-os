@@ -1897,6 +1897,7 @@
     function renderAll() {
       renderOverview();
       renderTodos(); renderDiet(); renderExercise(); renderFinance(); renderBooks(); renderDiary(); renderEnglish();
+      renderTaskboard();
       renderRecipes(); renderPriceItems(); renderProjects(); renderResources(); renderCook(); renderProfile(); renderHelp(); renderWishlist();
     }
 
@@ -2086,6 +2087,7 @@
       const dt = document.getElementById('overviewDate');
       if (dt) dt.textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+      renderTaskboard();
       updateThemePills();
     }
 
