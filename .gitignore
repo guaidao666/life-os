@@ -1,0 +1,20 @@
+# === 隐私数据：绝不进仓库 ===
+# life.db 含记账/心情/联系人/借条等个人数据，uploads/ 含隐私图片
+life.db
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+
+# 本地 Obsidian vault 真实路径（含个人信息，不进仓库；server 优先读此文件）
+.vaultpath
+
+# === 系统 / 临时 ===
+*.log
+.DS_Store
+Thumbs.db
+node_modules/
+
+# === 编辑器 ===
+.vscode/
+.idea/
