@@ -653,7 +653,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 任务板刷新：日级任务跨天、周级任务跨周时自动取消勾选并扣回愿力点
+  // 任务板刷新：日级任务跨天、周级任务跨周时自动取消勾选（重置为未完成，不扣回愿力点）
   if (req.method === 'POST' && url === '/api/taskboard-tick') {
     try {
       const pad = n => String(n).padStart(2, '0');
@@ -661,7 +661,7 @@ const server = http.createServer(async (req, res) => {
       const mondayOf = (ds) => { const d = new Date(ds + 'T00:00:00Z'); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
       const weekStart = mondayOf(todayUTC);
       const rows = db.prepare('SELECT id,grp,done,done_at,points FROM taskboard WHERE done=1').all();
-      let wpDelta = 0, resetCount = 0;
+      let resetCount = 0;
       const upd = db.prepare('UPDATE taskboard SET done=0, done_at=NULL WHERE id=?');
       for (const r of rows) {
         const grp = r.grp || '';
@@ -672,17 +672,11 @@ const server = http.createServer(async (req, res) => {
         let reset = false;
         if (grp.startsWith('日级')) reset = r.done_at.slice(0, 10) !== todayUTC;
         else if (grp.startsWith('周级')) reset = mondayOf(r.done_at.slice(0, 10)) !== weekStart;
-        if (reset) { upd.run(r.id); wpDelta -= (Number(r.points) || 0); resetCount++; }
-      }
-      let player = null;
-      if (wpDelta !== 0) {
-        const cur = db.prepare('SELECT willpower,starwish,contract,level FROM player_stats WHERE id=1').get();
-        const nw = Math.max(0, (Number(cur.willpower) || 0) + wpDelta);
-        db.prepare('UPDATE player_stats SET willpower=? WHERE id=1').run(nw);
-        player = { willpower: nw, starwish: cur.starwish, contract: cur.contract, level: cur.level };
+        // 每日/每周重置：仅把任务打回未完成，不扣回愿力点（愿力点是完成任务赚到的，永久保留）
+        if (reset) { upd.run(r.id); resetCount++; }
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, resetCount, willpowerDelta: wpDelta, player }));
+      res.end(JSON.stringify({ ok: true, resetCount, willpowerDelta: 0, player: null }));
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: String(e) }));
