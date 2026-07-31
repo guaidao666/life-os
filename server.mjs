@@ -49,6 +49,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS diary (id INTEGER PRIMARY KEY, date TEXT, title TEXT, content TEXT, mood TEXT, created_at TEXT);
 `);
 
+// 迁移：taskboard 增加 done_at（记录完成时间，用于日/周自动刷新）
+try { db.exec('ALTER TABLE taskboard ADD COLUMN done_at TEXT'); } catch (e) { /* 列已存在则忽略 */ }
+
 const getSetting = (k, d) => {
   const row = db.prepare('SELECT value FROM settings WHERE key=?').get(k);
   return row ? row.value : d;
@@ -114,8 +117,8 @@ function readData() {
   const wishlist = db.prepare('SELECT id,name,required_stars,done,note FROM wishlist').all()
     .map(r => ({ id: r.id, name: r.name, requiredStars: r.required_stars, done: !!r.done, note: r.note }));
 
-  const taskboard = db.prepare('SELECT id,grp,text,depth,done,points FROM taskboard ORDER BY id').all()
-    .map(r => ({ id: r.id, grp: r.grp, text: r.text, depth: r.depth, done: !!r.done, points: r.points }));
+  const taskboard = db.prepare('SELECT id,grp,text,depth,done,points,done_at FROM taskboard ORDER BY id').all()
+    .map(r => ({ id: r.id, grp: r.grp, text: r.text, depth: r.depth, done: !!r.done, points: r.points, done_at: r.done_at || '' }));
 
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
@@ -524,6 +527,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 通用删除接口：按 id 删除白名单内表的某行（用于任务板删除任务等）
+  if (req.method === 'POST' && url === '/api/delete') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { table, id } = JSON.parse(body);
+        if (!INSERT_TABLES.has(table)) throw new Error('不允许的表: ' + table);
+        if (id === undefined || id === null) throw new Error('id 必填');
+        db.prepare('DELETE FROM ' + table + ' WHERE id=?').run(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, id, table }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(e) }));
+      }
+    });
+    return;
+  }
+
   // 从 Obsidian 日记批量导入到 diary 表（按 date 去重，已存在则跳过）
   if (req.method === 'POST' && url === '/api/import-diary') {
     try {
@@ -587,6 +610,43 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: false, error: String(e) }));
       }
     });
+    return;
+  }
+
+  // 任务板刷新：日级任务跨天、周级任务跨周时自动取消勾选并扣回愿力点
+  if (req.method === 'POST' && url === '/api/taskboard-tick') {
+    try {
+      const pad = n => String(n).padStart(2, '0');
+      const todayUTC = new Date().toISOString().slice(0, 10);
+      const mondayOf = (ds) => { const d = new Date(ds + 'T00:00:00Z'); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
+      const weekStart = mondayOf(todayUTC);
+      const rows = db.prepare('SELECT id,grp,done,done_at,points FROM taskboard WHERE done=1').all();
+      let wpDelta = 0, resetCount = 0;
+      const upd = db.prepare('UPDATE taskboard SET done=0, done_at=NULL WHERE id=?');
+      for (const r of rows) {
+        const grp = r.grp || '';
+        if (!r.done_at) { // 旧数据无完成时间：初始化为今天，本周内不刷新
+          db.prepare('UPDATE taskboard SET done_at=? WHERE id=?').run(todayUTC, r.id);
+          continue;
+        }
+        let reset = false;
+        if (grp.startsWith('日级')) reset = r.done_at.slice(0, 10) !== todayUTC;
+        else if (grp.startsWith('周级')) reset = mondayOf(r.done_at.slice(0, 10)) !== weekStart;
+        if (reset) { upd.run(r.id); wpDelta -= (Number(r.points) || 0); resetCount++; }
+      }
+      let player = null;
+      if (wpDelta !== 0) {
+        const cur = db.prepare('SELECT willpower,starwish,contract,level FROM player_stats WHERE id=1').get();
+        const nw = Math.max(0, (Number(cur.willpower) || 0) + wpDelta);
+        db.prepare('UPDATE player_stats SET willpower=? WHERE id=1').run(nw);
+        player = { willpower: nw, starwish: cur.starwish, contract: cur.contract, level: cur.level };
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, resetCount, willpowerDelta: wpDelta, player }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
     return;
   }
 

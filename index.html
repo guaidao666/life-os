@@ -527,6 +527,14 @@
   .tb-item > span:first-of-type { flex:1; font-size:14px; line-height:1.4; }
   .tb-done { text-decoration:line-through; opacity:.45; }
   .tb-points { font-size:11px; color:#fff; background:var(--orange); padding:1px 8px; border-radius:999px; white-space:nowrap; }
+  .tb-edit-btn { margin-left:auto; font-size:12px; padding:4px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-solid); color:var(--text-secondary); cursor:pointer; transition:all .15s; }
+  .tb-edit-btn:hover, .tb-edit-btn.active { border-color:var(--purple); color:var(--purple); }
+  .tb-add-form { display:flex; flex-wrap:wrap; gap:8px; padding:10px 16px 4px; }
+  .tb-add-form .input { flex:1; min-width:110px; }
+  .tb-del-btn { opacity:0; margin-left:4px; border:none; background:transparent; color:var(--text-tertiary); cursor:pointer; font-size:14px; transition:opacity .15s; flex:0 0 auto; }
+  .tb-item:hover .tb-del-btn { opacity:1; }
+  .tb-del-btn:hover { color:#ff5a5f; }
+  .tb-done-group .tb-group-title { color:var(--text-secondary); }
   .muted { color:#999; font-weight:400; font-size:13px; }
   </style>
 </head>
@@ -647,7 +655,19 @@
             </div>
           </div>
           <div class="card" style="margin-top:18px;">
-            <div class="card-title">📋 任务板 <span class="muted">（勾选自动 +愿力点）</span></div>
+            <div class="card-title">📋 任务板 <span class="muted">（勾选自动 +愿力点）</span>
+              <button class="tb-edit-btn" id="tbEditBtn" onclick="toggleTbEdit()">✏️ 编辑</button>
+            </div>
+            <div id="tbAddForm" class="tb-add-form" style="display:none;">
+              <input class="input" id="tbNewText" placeholder="新任务内容..." onkeypress="if(event.key==='Enter')addTask()">
+              <select class="input" id="tbNewGrp" onchange="syncTbPoints()">
+                <option value="日级任务栏 +1">日级</option>
+                <option value="周级任务栏 +10">周级</option>
+                <option value="长期任务栏 +？">长期</option>
+              </select>
+              <input class="input" id="tbNewPoints" type="number" value="1" style="width:72px;" placeholder="愿力点">
+              <button class="btn" onclick="addTask()">添加</button>
+            </div>
             <div id="taskboardWrap" class="taskboard-wrap"></div>
           </div>
         </div>
@@ -2000,31 +2020,43 @@
         .catch(e => console.warn('update wishlist error', e));
     }
 
+    let tbEditMode = false;
     function renderTaskboard() {
       const wrap = document.getElementById('taskboardWrap');
       if (!wrap) return;
       const list = (data && data.taskboard) || [];
-      if (!list.length) { wrap.innerHTML = '<div class="empty-state">暂无任务，去 Obsidian 任务板补充吧</div>'; return; }
+      if (!list.length) { wrap.innerHTML = '<div class="empty-state">暂无任务，点「✏️ 编辑」添加吧</div>'; return; }
+      const doneTasks = list.filter(t => t.done);
+      const active = list.filter(t => !t.done);
       const groups = {};
-      list.forEach(t => { (groups[t.grp] = groups[t.grp] || []).push(t); });
-      wrap.innerHTML = Object.keys(groups).map(g => {
+      active.forEach(t => { (groups[t.grp] = groups[t.grp] || []).push(t); });
+      const itemHtml = (t) => `
+        <label class="tb-item" style="margin-left:${t.depth * 18}px">
+          <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskboard(${t.id}, this.checked, ${t.points})">
+          <span class="${t.done ? 'tb-done' : ''}">${esc(t.text)}</span>
+          ${t.points ? `<span class="tb-points">${t.points > 0 ? '+' : ''}${t.points}愿</span>` : ''}
+          ${tbEditMode ? `<button type="button" class="tb-del-btn" onclick="deleteTask(${t.id})" title="删除">✕</button>` : ''}
+        </label>`;
+      const groupHtml = Object.keys(groups).map(g => {
         const gItems = groups[g] || [];
-        const doneCount = gItems.filter(t => t.done).length;
-        const collapsed = !/日级/.test(g); // 日级任务栏默认展开，其余折叠
-        const items = gItems.map(t => `
-          <label class="tb-item" style="margin-left:${t.depth * 18}px">
-            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskboard(${t.id}, this.checked, ${t.points})">
-            <span class="${t.done ? 'tb-done' : ''}">${esc(t.text)}</span>
-            ${t.points ? `<span class="tb-points">${t.points > 0 ? '+' : ''}${t.points}愿</span>` : ''}
-          </label>`).join('');
-        return `<div class="tb-group${collapsed ? ' collapsed' : ''}">
+        const collapsed = gItems.length && !/日级/.test(g) ? ' collapsed' : '';
+        return `<div class="tb-group${collapsed}">
           <div class="tb-group-head" onclick="toggleTbGroup(this)">
             <div class="tb-group-title"><span class="tb-caret">▾</span>${esc(g)}</div>
-            <span class="tb-count">${doneCount}/${gItems.length}</span>
+            <span class="tb-count">${gItems.length}</span>
           </div>
-          <div class="tb-group-body">${items}</div>
+          <div class="tb-group-body">${gItems.map(itemHtml).join('')}</div>
         </div>`;
       }).join('');
+      const completedHtml = doneTasks.length ? `
+        <div class="tb-group tb-done-group">
+          <div class="tb-group-head" onclick="toggleTbGroup(this)">
+            <div class="tb-group-title"><span class="tb-caret">▾</span>✅ 已完成 (${doneTasks.length})</div>
+            <span class="tb-count">${doneTasks.length}</span>
+          </div>
+          <div class="tb-group-body">${doneTasks.map(itemHtml).join('')}</div>
+        </div>` : '';
+      wrap.innerHTML = groupHtml + completedHtml;
     }
 
     function toggleTbGroup(head) {
@@ -2032,12 +2064,53 @@
       if (grp) grp.classList.toggle('collapsed');
     }
 
+    function toggleTbEdit() {
+      tbEditMode = !tbEditMode;
+      const f = document.getElementById('tbAddForm');
+      const btn = document.getElementById('tbEditBtn');
+      if (f) f.style.display = tbEditMode ? 'flex' : 'none';
+      if (btn) { btn.textContent = tbEditMode ? '✅ 完成' : '✏️ 编辑'; btn.classList.toggle('active', tbEditMode); }
+      renderTaskboard();
+    }
+
+    function syncTbPoints() {
+      const g = document.getElementById('tbNewGrp').value;
+      const p = document.getElementById('tbNewPoints');
+      if (/周级/.test(g)) p.value = 10; else p.value = 1;
+    }
+
+    function addTask() {
+      const text = document.getElementById('tbNewText').value.trim();
+      const grp = document.getElementById('tbNewGrp').value;
+      const points = parseInt(document.getElementById('tbNewPoints').value) || 0;
+      if (!text) { alert('请输入任务内容'); return; }
+      const id = Date.now();
+      fetch('/api/insert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'taskboard', fields: { grp, text, depth: 0, done: 0, points } }) })
+        .then(r => r.json()).then(j => {
+          if (!j.ok) { console.warn('add task failed', j); return; }
+          if (!data.taskboard) data.taskboard = [];
+          data.taskboard.push({ id: j.id || id, grp, text, depth: 0, done: false, points, done_at: '' });
+          const inp = document.getElementById('tbNewText'); if (inp) inp.value = '';
+          renderTaskboard();
+        }).catch(e => console.warn('add task error', e));
+    }
+
+    function deleteTask(id) {
+      if (!confirm('确定删除这条任务？')) return;
+      fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'taskboard', id }) })
+        .then(r => r.json()).then(j => {
+          if (!j.ok) { console.warn('delete failed', j); return; }
+          data.taskboard = (data.taskboard || []).filter(t => t.id !== id);
+          renderTaskboard();
+        }).catch(e => console.warn('delete error', e));
+    }
+
     function toggleTaskboard(id, done, points) {
       if (!data.taskboard) data.taskboard = [];
       const t = data.taskboard.find(x => x.id === id);
-      if (t) t.done = done;
+      if (t) { t.done = done; t.done_at = done ? todayStr() : ''; }
       renderTaskboard(); // 乐观更新 UI
-      fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'taskboard', id, fields: { done: done ? 1 : 0 } }) })
+      fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'taskboard', id, fields: { done: done ? 1 : 0, done_at: done ? todayStr() : null } }) })
         .then(r => r.json()).then(j => {
           if (!j.ok) { console.warn('taskboard update failed', j); return; }
           const delta = done ? (points || 0) : -(points || 0);
@@ -2047,6 +2120,15 @@
               .catch(e => console.warn('reward error', e));
           }
         }).catch(e => console.warn('taskboard error', e));
+    }
+
+    // 日/周刷新：页面加载时调一次，自动把跨天/跨周的日级、周级任务取消勾选并扣回愿力点
+    async function taskboardTick() {
+      try {
+        const r = await fetch('/api/taskboard-tick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const j = await r.json().catch(() => ({}));
+        if (j.ok) await loadData();
+      } catch (e) { /* 忽略 */ }
     }
 
     function renderOverview() {
@@ -2134,6 +2216,7 @@
     // Init
     document.addEventListener('DOMContentLoaded', async () => {
       await loadData();
+      await taskboardTick();
       const h = new Date().getHours();
       document.getElementById('greeting').textContent = (h < 11 ? '早上好' : h < 14 ? '中午好' : h < 19 ? '下午好' : '晚上好') + '，我';
       document.getElementById('dateText').textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
