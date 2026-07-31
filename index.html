@@ -538,7 +538,7 @@
       <nav class="nav" id="nav">
         <div class="nav-group-title">核心</div>
         <div class="nav-item active" data-section="overview" onclick="showSection('overview')"><span class="nav-icon">🏠</span>总览</div>
-        <div class="nav-item" data-section="plan" onclick="showSection('plan')"><span class="nav-icon">☑️</span>每日计划</div>
+        <div class="nav-item" data-section="overview" onclick="showSection('overview'); setTimeout(()=>{const e=document.getElementById('planBlock'); if(e) e.scrollIntoView({behavior:'smooth'});},80)"><span class="nav-icon">☑️</span>每日计划</div>
 
         <div class="nav-group-title">日常记录</div>
         <div class="nav-item" data-section="diet" onclick="showSection('diet')"><span class="nav-icon">🍎</span>饮食记录</div>
@@ -605,10 +605,6 @@
 
         <div class="today-cols">
           <div class="today-panel">
-            <div class="today-panel-title">今日要做</div>
-            <div class="today-todo" id="todayTodo"></div>
-          </div>
-          <div class="today-panel">
             <div class="today-panel-title">快速记录</div>
             <div class="quick-grid">
               <button class="quick-btn" onclick="showSection('finance')">💰 记一笔</button>
@@ -620,6 +616,41 @@
 
         <div class="module-grid-title">常用入口</div>
         <div class="module-grid" id="moduleGrid"></div>
+
+        <div class="overview-block" id="planBlock" style="margin-top:22px;">
+          <div class="module-grid-title">每日计划</div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">📝 今日待办</div>
+              <div class="form-row">
+                <input class="input" id="todoInput" placeholder="添加一件待办..." onkeypress="if(event.key==='Enter')addTodo()">
+                <select class="input" id="todoPriority" style="width:100px;flex:0;">
+                  <option value="high">高优先级</option>
+                  <option value="medium" selected>中优先级</option>
+                  <option value="low">低优先级</option>
+                </select>
+                <button class="btn" onclick="addTodo()">添加</button>
+              </div>
+              <ul class="todo-list" id="todoList"></ul>
+            </div>
+            <div class="card">
+              <div class="card-title">📈 今日完成率</div>
+              <svg class="progress-ring" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="52" fill="none" stroke="var(--bg)" stroke-width="10"/>
+                <circle id="progressCircle" cx="60" cy="60" r="52" fill="none" stroke="url(#grad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+                <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#af52de"/><stop offset="100%" stop-color="#5ac8fa"/></linearGradient></defs>
+              </svg>
+              <div style="text-align:center;margin-top:-70px;position:relative;">
+                <div class="stat-number" id="todoPercent">0%</div>
+                <div class="stat-label" id="todoStats">0 / 0</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:18px;">
+            <div class="card-title">📋 任务板 <span class="muted">（勾选自动 +愿力点）</span></div>
+            <div id="taskboardWrap" class="taskboard-wrap"></div>
+          </div>
+        </div>
       </section>
 
       <!-- 0.5 个人面板 -->
@@ -715,40 +746,7 @@
         <div class="wishlist-wrap" id="wishlistWrap"></div>
       </section>
 
-      <!-- 1. 每日计划 -->
-      <section class="section" id="sec-plan">
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-title">📝 今日待办</div>
-            <div class="form-row">
-              <input class="input" id="todoInput" placeholder="添加一件待办..." onkeypress="if(event.key==='Enter')addTodo()">
-              <select class="input" id="todoPriority" style="width:100px;flex:0;">
-                <option value="high">高优先级</option>
-                <option value="medium" selected>中优先级</option>
-                <option value="low">低优先级</option>
-              </select>
-              <button class="btn" onclick="addTodo()">添加</button>
-            </div>
-            <ul class="todo-list" id="todoList"></ul>
-          </div>
-          <div class="card">
-            <div class="card-title">📈 今日完成率</div>
-            <svg class="progress-ring" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--bg)" stroke-width="10"/>
-              <circle id="progressCircle" cx="60" cy="60" r="52" fill="none" stroke="url(#grad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
-              <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#af52de"/><stop offset="100%" stop-color="#5ac8fa"/></linearGradient></defs>
-            </svg>
-            <div style="text-align:center;margin-top:-70px;position:relative;">
-              <div class="stat-number" id="todoPercent">0%</div>
-              <div class="stat-label" id="todoStats">0 / 0</div>
-            </div>
-          </div>
-        </div>
-        <div class="card" style="margin-top:18px;">
-          <div class="card-title">📋 任务板 <span class="muted">（勾选自动 +愿力点）</span></div>
-          <div id="taskboardWrap" class="taskboard-wrap"></div>
-        </div>
-      </section>
+      <!-- 每日计划已并入总览底部 planBlock -->
 
       <!-- 2. 饮食记录 -->
       <section class="section" id="sec-diet">
@@ -2095,7 +2093,6 @@
 
       // 常用入口
       const modules = [
-        { sec: 'plan', icon: '☑️', title: '每日计划' },
         { sec: 'diet', icon: '🍎', title: '饮食记录' },
         { sec: 'exercise', icon: '🏃', title: '运动打卡' },
         { sec: 'finance', icon: '💰', title: '记账存钱' },
