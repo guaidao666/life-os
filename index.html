@@ -527,6 +527,10 @@
   .tb-item > span:first-of-type { flex:1; font-size:14px; line-height:1.4; }
   .tb-done { text-decoration:line-through; opacity:.45; }
   .tb-points { font-size:11px; color:#fff; background:var(--orange); padding:1px 8px; border-radius:999px; white-space:nowrap; }
+  .tb-handle { cursor:grab; color:var(--text-tertiary); margin-right:6px; user-select:none; font-size:14px; line-height:1; }
+  .tb-item[draggable="true"] { cursor:grab; }
+  .tb-item.dragging { opacity:.4; }
+  .tb-group-body.drag-over { background:rgba(175,82,222,0.10); border-radius:8px; outline:1px dashed var(--purple); }
   .tb-edit-btn { margin-left:auto; font-size:12px; padding:4px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-solid); color:var(--text-secondary); cursor:pointer; transition:all .15s; }
   .tb-edit-btn:hover, .tb-edit-btn.active { border-color:var(--purple); color:var(--purple); }
   .tb-add-form { display:flex; flex-wrap:wrap; gap:8px; padding:10px 16px 4px; }
@@ -2030,13 +2034,17 @@
       const active = list.filter(t => !t.done);
       const groups = {};
       active.forEach(t => { (groups[t.grp] = groups[t.grp] || []).push(t); });
-      const itemHtml = (t) => `
-        <label class="tb-item" style="margin-left:${t.depth * 18}px">
+      const itemHtml = (t) => {
+        const draggable = (!t.done && tbEditMode);
+        return `
+        <label class="tb-item" ${draggable ? `draggable="true" ondragstart="tbDragStart(event, ${t.id})" ondragend="tbDragEnd(event)" ondragover="tbDragOver(event)" ondrop="tbDropItem(event, ${t.id})"` : ''} style="margin-left:${t.depth * 18}px">
+          ${draggable ? `<span class="tb-handle" title="拖动排序">⠿</span>` : ''}
           <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskboard(${t.id}, this.checked, ${t.points})">
           <span class="${t.done ? 'tb-done' : ''}">${esc(t.text)}</span>
           ${t.points ? `<span class="tb-points">${t.points > 0 ? '+' : ''}${t.points}愿</span>` : ''}
           ${tbEditMode ? `<button type="button" class="tb-del-btn" onclick="deleteTask(${t.id})" title="删除">✕</button>` : ''}
         </label>`;
+      };
       const groupHtml = Object.keys(groups).map(g => {
         const gItems = groups[g] || [];
         const collapsed = gItems.length && !/日级/.test(g) ? ' collapsed' : '';
@@ -2045,7 +2053,7 @@
             <div class="tb-group-title"><span class="tb-caret">▾</span>${esc(g)}</div>
             <span class="tb-count">${gItems.length}</span>
           </div>
-          <div class="tb-group-body">${gItems.map(itemHtml).join('')}</div>
+          <div class="tb-group-body" ondragover="tbDragOver(event)" ondrop="tbDropGroup(event, '${esc(g)}')">${gItems.map(itemHtml).join('')}</div>
         </div>`;
       }).join('');
       const completedHtml = doneTasks.length ? `
@@ -2084,12 +2092,15 @@
       const grp = document.getElementById('tbNewGrp').value;
       const points = parseInt(document.getElementById('tbNewPoints').value) || 0;
       if (!text) { alert('请输入任务内容'); return; }
+      const cur = (data.taskboard || []).filter(t => t.grp === grp);
+      const maxOrd = cur.length ? Math.max.apply(null, cur.map(t => t.ord || 0)) : 0;
+      const ord = maxOrd + 1;
       const id = Date.now();
-      fetch('/api/insert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'taskboard', fields: { grp, text, depth: 0, done: 0, points } }) })
+      fetch('/api/insert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'taskboard', fields: { grp, text, depth: 0, done: 0, points, ord } }) })
         .then(r => r.json()).then(j => {
           if (!j.ok) { console.warn('add task failed', j); return; }
           if (!data.taskboard) data.taskboard = [];
-          data.taskboard.push({ id: j.id || id, grp, text, depth: 0, done: false, points, done_at: '' });
+          data.taskboard.push({ id: j.id || id, grp, text, depth: 0, done: false, points, done_at: '', ord });
           const inp = document.getElementById('tbNewText'); if (inp) inp.value = '';
           renderTaskboard();
         }).catch(e => console.warn('add task error', e));
@@ -2120,6 +2131,70 @@
               .catch(e => console.warn('reward error', e));
           }
         }).catch(e => console.warn('taskboard error', e));
+    }
+
+    // ---- 任务板拖动排序 ----
+    let dragTbId = null;
+    function tbDragStart(e, id) {
+      dragTbId = id;
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)); } catch (_) {}
+      const el = e.currentTarget; if (el) el.classList.add('dragging');
+    }
+    function tbDragEnd(e) {
+      const el = e.currentTarget; if (el) el.classList.remove('dragging');
+      document.querySelectorAll('.tb-group-body.drag-over').forEach(b => b.classList.remove('drag-over'));
+    }
+    function tbDragOver(e) {
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      const t = e.currentTarget;
+      const body = (t.classList && t.classList.contains('tb-group-body')) ? t : (t.closest ? t.closest('.tb-group-body') : null);
+      if (body) body.classList.add('drag-over');
+    }
+    function tbDropItem(e, targetId) {
+      e.preventDefault(); e.stopPropagation();
+      const body = e.currentTarget.closest('.tb-group-body'); if (body) body.classList.remove('drag-over');
+      const rect = e.currentTarget.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      doReorder(dragTbId, targetId, before);
+    }
+    function tbDropGroup(e, grp) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      doReorder(dragTbId, null, false, grp);
+    }
+    function doReorder(dragId, targetId, before, targetGrp) {
+      if (dragId == null) return;
+      if (targetId != null && String(dragId) === String(targetId)) return;
+      const list = data.taskboard || [];
+      const drag = list.find(t => String(t.id) === String(dragId));
+      if (!drag) return;
+      let tGrp = targetGrp;
+      if (tGrp == null) { const t = list.find(x => String(x.id) === String(targetId)); tGrp = t ? t.grp : drag.grp; }
+      const idx = list.findIndex(t => String(t.id) === String(dragId));
+      list.splice(idx, 1);
+      drag.grp = tGrp;
+      let insertAt;
+      if (targetId == null) {
+        let lastIdx = -1;
+        list.forEach((t, i) => { if (t.grp === tGrp) lastIdx = i; });
+        insertAt = lastIdx + 1;
+      } else {
+        const tIdx = list.findIndex(t => String(t.id) === String(targetId));
+        insertAt = before ? tIdx : tIdx + 1;
+      }
+      insertAt = Math.max(0, Math.min(insertAt, list.length));
+      list.splice(insertAt, 0, drag);
+      const counters = {};
+      list.forEach(t => { counters[t.grp] = (counters[t.grp] === undefined ? -1 : counters[t.grp]) + 1; t.ord = counters[t.grp]; });
+      renderTaskboard();
+      saveTaskboardOrder();
+    }
+    function saveTaskboardOrder() {
+      const updates = (data.taskboard || []).map(t => ({ id: t.id, grp: t.grp, ord: t.ord || 0 }));
+      fetch('/api/reorder-taskboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates }) })
+        .then(r => r.json()).then(j => { if (!j.ok) console.warn('reorder failed', j); })
+        .catch(e => console.warn('reorder error', e));
     }
 
     // 日/周刷新：页面加载时调一次，自动把跨天/跨周的日级、周级任务取消勾选并扣回愿力点

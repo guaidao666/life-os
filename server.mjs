@@ -51,6 +51,8 @@ db.exec(`
 
 // 迁移：taskboard 增加 done_at（记录完成时间，用于日/周自动刷新）
 try { db.exec('ALTER TABLE taskboard ADD COLUMN done_at TEXT'); } catch (e) { /* 列已存在则忽略 */ }
+// 迁移：taskboard 增加 ord（组内排序，用于拖动排序）
+try { db.exec('ALTER TABLE taskboard ADD COLUMN ord INTEGER DEFAULT 0'); } catch (e) { /* 列已存在则忽略 */ }
 
 const getSetting = (k, d) => {
   const row = db.prepare('SELECT value FROM settings WHERE key=?').get(k);
@@ -117,8 +119,8 @@ function readData() {
   const wishlist = db.prepare('SELECT id,name,required_stars,done,note FROM wishlist').all()
     .map(r => ({ id: r.id, name: r.name, requiredStars: r.required_stars, done: !!r.done, note: r.note }));
 
-  const taskboard = db.prepare('SELECT id,grp,text,depth,done,points,done_at FROM taskboard ORDER BY id').all()
-    .map(r => ({ id: r.id, grp: r.grp, text: r.text, depth: r.depth, done: !!r.done, points: r.points, done_at: r.done_at || '' }));
+  const taskboard = db.prepare('SELECT id,grp,text,depth,done,points,done_at,ord FROM taskboard ORDER BY grp, ord, id').all()
+    .map(r => ({ id: r.id, grp: r.grp, text: r.text, depth: r.depth, done: !!r.done, points: r.points, done_at: r.done_at || '', ord: r.ord || 0 }));
 
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
@@ -539,6 +541,26 @@ const server = http.createServer(async (req, res) => {
         db.prepare('DELETE FROM ' + table + ' WHERE id=?').run(id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, id, table }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // 任务板拖动排序：批量更新 grp + ord（落库顺序/分组），前端一次拖拽只发一次请求
+  if (req.method === 'POST' && url === '/api/reorder-taskboard') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { updates } = JSON.parse(body);
+        if (!Array.isArray(updates) || !updates.length) throw new Error('updates 必须是非空数组');
+        const stmt = db.prepare('UPDATE taskboard SET grp=?, ord=? WHERE id=?');
+        for (const r of updates) stmt.run(String(r.grp), parseInt(r.ord) || 0, r.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, count: updates.length }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: String(e) }));
