@@ -1352,7 +1352,7 @@
           <div class="todo-check" onclick="toggleTodo(${t.id})"></div>
           <div class="todo-text">${escapeHtml(t.text)}</div>
           <span class="todo-priority p-${t.priority}">${{high:'高',medium:'中',low:'低'}[t.priority]}</span>
-          <span class="todo-pts">+${t.points||1}</span>
+          <span class="todo-pts">+${t.points||1}愿</span>
           <div class="todo-delete" onclick="deleteTodo(${t.id})">×</div>
         </li>`).join('');
       }
@@ -1363,7 +1363,7 @@
         else dl.innerHTML = doneList.map(t => `<li class="todo-done-item">
           <div class="todo-check done" onclick="toggleTodo(${t.id})">✓</div>
           <div class="todo-text done">${escapeHtml(t.text)}</div>
-          <span class="todo-pts">+${t.points||1}</span>
+          <span class="todo-pts">+${t.points||1}愿</span>
           <div class="todo-delete" onclick="deleteTodo(${t.id})">×</div>
         </li>`).join('');
       }
