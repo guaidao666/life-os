@@ -258,6 +258,15 @@
     .p-low { background: var(--blue); }
     .todo-delete { color: var(--text-secondary); cursor: pointer; font-size: 18px; padding: 4px; }
     .todo-delete:hover { color: var(--pink); }
+    .todo-pts { font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 600; color: #fff; background: var(--orange); flex-shrink: 0; }
+    .todo-check.done { background: var(--green); border-color: var(--green); color: #fff; }
+    /* 右侧已完成框 */
+    .todo-done-wrap { text-align: left; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .todo-done-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+    .todo-done-list { list-style: none; padding: 0; margin: 0; max-height: 220px; overflow-y: auto; }
+    .todo-done-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--surface-solid); border-radius: 12px; border: 1px solid var(--border); }
+    .todo-done-item .todo-text.done { text-decoration: line-through; opacity: .6; }
+    .todo-done-empty { font-size: 13px; color: var(--text-secondary); padding: 6px 2px; }
     .progress-ring {
       width: 120px; height: 120px; margin: 0 auto;
     }
@@ -654,6 +663,7 @@
                   <option value="medium" selected>中优先级</option>
                   <option value="low">低优先级</option>
                 </select>
+                <input class="input" id="todoPoints" type="number" value="1" min="0" style="width:66px;flex:0;" title="愿力点（默认1，可改）">
                 <button class="btn" onclick="addTodo()">添加</button>
               </div>
               <ul class="todo-list" id="todoList"></ul>
@@ -668,6 +678,10 @@
               <div style="text-align:center;margin-top:-70px;position:relative;">
                 <div class="stat-number" id="todoPercent">0%</div>
                 <div class="stat-label" id="todoStats">0 / 0</div>
+              </div>
+              <div class="todo-done-wrap">
+                <div class="todo-done-title">✅ 已完成</div>
+                <ul class="todo-done-list" id="todoDoneList"></ul>
               </div>
             </div>
           </div>
@@ -1291,13 +1305,37 @@
       const input = document.getElementById('todoInput');
       const text = input.value.trim();
       if (!text) return;
-      data.todos.push({ id: Date.now(), text, priority: document.getElementById('todoPriority').value, done: false });
+      let pts = parseInt(document.getElementById('todoPoints').value, 10);
+      if (isNaN(pts) || pts < 0) pts = 1;
+      data.todos.push({ id: Date.now(), text, priority: document.getElementById('todoPriority').value, done: false, points: pts });
       input.value = '';
       saveData();
     }
     function toggleTodo(id) {
       const t = data.todos.find(x => x.id === id);
-      if (t) { t.done = !t.done; saveData(); }
+      if (!t) return;
+      const willBeDone = !t.done;
+      t.done = willBeDone;
+      const delta = (t.points || 1) * (willBeDone ? 1 : -1);
+      renderTodos(); // 乐观更新 UI
+      saveData();
+      if (data.player) {
+        fetch('/api/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ willpower: delta, source: willBeDone ? '每日待办' : '每日待办取消', text: t.text || '' }) })
+          .then(r => r.json()).then(j2 => {
+            if (j2.ok && j2.player) {
+              data.player = Object.assign({}, data.player, j2.player);
+              if (!data.rewardLog) data.rewardLog = [];
+              data.rewardLog.unshift({
+                id: Date.now(), ts: new Date().toISOString(),
+                source: willBeDone ? '每日待办' : '每日待办取消',
+                text: t.text || '', dw: delta, dsw: 0, bw: j2.player.willpower, bsw: j2.player.starwish
+              });
+              if (data.rewardLog.length > 50) data.rewardLog.length = 50;
+              if (typeof renderProfile === 'function') renderProfile();
+            }
+          })
+          .catch(e => console.warn('reward error', e));
+      }
     }
     function deleteTodo(id) {
       data.todos = data.todos.filter(x => x.id !== id);
@@ -1305,17 +1343,32 @@
     }
     function renderTodos() {
       const list = document.getElementById('todoList');
-      if (!data.todos.length) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">☕</div>今天还没有待办，添加一个吧</div>'; }
+      const pending = (data.todos || []).filter(t => !t.done);
+      const doneList = (data.todos || []).filter(t => t.done);
+      // 左侧：未完成待办
+      if (!pending.length) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">☕</div>今天还没有待办，添加一个吧</div>'; }
       else {
-        list.innerHTML = data.todos.map(t => `<li class="todo-item ${t.done?'done':''}">
-          <div class="todo-check" onclick="toggleTodo(${t.id})">${t.done?'✓':''}</div>
+        list.innerHTML = pending.map(t => `<li class="todo-item">
+          <div class="todo-check" onclick="toggleTodo(${t.id})"></div>
           <div class="todo-text">${escapeHtml(t.text)}</div>
           <span class="todo-priority p-${t.priority}">${{high:'高',medium:'中',low:'低'}[t.priority]}</span>
+          <span class="todo-pts">+${t.points||1}</span>
+          <div class="todo-delete" onclick="deleteTodo(${t.id})">×</div>
+        </li>`).join('');
+      }
+      // 右侧：已完成列表
+      const dl = document.getElementById('todoDoneList');
+      if (dl) {
+        if (!doneList.length) dl.innerHTML = '<div class="todo-done-empty">还没有完成的任务</div>';
+        else dl.innerHTML = doneList.map(t => `<li class="todo-done-item">
+          <div class="todo-check done" onclick="toggleTodo(${t.id})">✓</div>
+          <div class="todo-text done">${escapeHtml(t.text)}</div>
+          <span class="todo-pts">+${t.points||1}</span>
           <div class="todo-delete" onclick="deleteTodo(${t.id})">×</div>
         </li>`).join('');
       }
       const total = data.todos.length;
-      const done = data.todos.filter(t => t.done).length;
+      const done = doneList.length;
       const pct = total ? Math.round(done/total*100) : 0;
       document.getElementById('todoPercent').textContent = pct + '%';
       document.getElementById('todoStats').textContent = `${done} / ${total}`;

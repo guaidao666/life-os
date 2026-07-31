@@ -26,7 +26,7 @@ const defaultTheme = {
 const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
-  CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, text TEXT, priority TEXT, done INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, text TEXT, priority TEXT, done INTEGER DEFAULT 0, points INTEGER DEFAULT 1);
   CREATE TABLE IF NOT EXISTS diet_logs (id INTEGER PRIMARY KEY, date TEXT, meal TEXT, name TEXT, cal INTEGER);
   CREATE TABLE IF NOT EXISTS recipes (id INTEGER PRIMARY KEY, name TEXT, category TEXT, cost TEXT, steps TEXT, source TEXT);
   CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY, date TEXT, type TEXT, min INTEGER, cal INTEGER);
@@ -57,6 +57,8 @@ db.exec(`
 try { db.exec('ALTER TABLE taskboard ADD COLUMN done_at TEXT'); } catch (e) { /* 列已存在则忽略 */ }
 // 迁移：taskboard 增加 ord（组内排序，用于拖动排序）
 try { db.exec('ALTER TABLE taskboard ADD COLUMN ord INTEGER DEFAULT 0'); } catch (e) { /* 列已存在则忽略 */ }
+// 迁移：todos 增加 points（每条待办自定义愿力点，默认 1）
+try { db.exec('ALTER TABLE todos ADD COLUMN points INTEGER DEFAULT 1'); } catch (e) { /* 列已存在则忽略 */ }
 
 const getSetting = (k, d) => {
   const row = db.prepare('SELECT value FROM settings WHERE key=?').get(k);
@@ -90,8 +92,8 @@ function num(v) {
 }
 
 function readData() {
-  const todos = db.prepare('SELECT id,text,priority,done FROM todos').all()
-    .map(r => ({ id: r.id, text: r.text, priority: r.priority, done: !!r.done }));
+  const todos = db.prepare('SELECT id,text,priority,done,points FROM todos').all()
+    .map(r => ({ id: r.id, text: r.text, priority: r.priority, done: !!r.done, points: r.points != null ? r.points : 1 }));
   const dietLogs = db.prepare('SELECT id,date,meal,name,cal FROM diet_logs').all()
     .map(r => ({ id: r.id, date: r.date, meal: r.meal, name: r.name, cal: r.cal }));
   const recipes = db.prepare('SELECT id,name,category,cost,steps,source FROM recipes').all()
@@ -167,8 +169,8 @@ function writeData(obj) {
   db.exec('BEGIN');
   try {
     db.exec('DELETE FROM todos; DELETE FROM diet_logs; DELETE FROM recipes; DELETE FROM exercises; DELETE FROM finances; DELETE FROM price_items; DELETE FROM books; DELETE FROM book_notes; DELETE FROM english_words; DELETE FROM projects; DELETE FROM resources; DELETE FROM cook_posts; DELETE FROM settings;');
-    const insTodo = db.prepare('INSERT INTO todos (id,text,priority,done) VALUES (?,?,?,?)');
-    (obj.todos || []).forEach(t => insTodo.run(t.id, t.text, t.priority, t.done ? 1 : 0));
+    const insTodo = db.prepare('INSERT INTO todos (id,text,priority,done,points) VALUES (?,?,?,?,?)');
+    (obj.todos || []).forEach(t => insTodo.run(t.id, t.text, t.priority, t.done ? 1 : 0, t.points || 1));
     const insDiet = db.prepare('INSERT INTO diet_logs (id,date,meal,name,cal) VALUES (?,?,?,?,?)');
     (obj.diet?.logs || []).forEach(l => insDiet.run(l.id, l.date, l.meal, l.name, l.cal));
     const insRecipe = db.prepare('INSERT INTO recipes (id,name,category,cost,steps,source) VALUES (?,?,?,?,?,?)');
