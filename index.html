@@ -2435,7 +2435,6 @@
     let entCurrentLib = 'literature';   // 默认文学书库（按 key）
     let calibreLibs = [];               // [{name,key,path,count}]
     let calibreLibsLoaded = false;
-    let lastCalibreSync = {};           // 节流：每个库 60s 内不重复自动同步
     function libName(key) { const l = calibreLibs.find(x => x.key === key); return l ? l.name : key; }
 
     function renderEntertainment() {
@@ -2501,16 +2500,8 @@
     function switchEntTab(t) {
       entCurrentTab = t;
       renderEntertainment();
-      if (t === '书籍') autoSyncBooks();
     }
-    function switchEntLib(key) { entCurrentLib = key; renderEntertainment(); if (key !== 'all') autoSyncBooks(); }
-    function autoSyncBooks() {
-      if (entCurrentLib === 'all') return;
-      const now = Date.now();
-      if (lastCalibreSync[entCurrentLib] && now - lastCalibreSync[entCurrentLib] < 60000) return;
-      lastCalibreSync[entCurrentLib] = now;
-      syncCalibre(entCurrentLib, true);
-    }
+    function switchEntLib(key) { entCurrentLib = key; renderEntertainment(); }
     function syncCalibre(lib, silent) {
       if (lib === 'all') { foodToast('请选择具体书库再同步'); return; }
       const btn = document.getElementById('entSyncCalibreBtn');
