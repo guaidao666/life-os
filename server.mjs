@@ -92,6 +92,10 @@ try { db.exec('ALTER TABLE entertainment ADD COLUMN formats TEXT DEFAULT \'\'');
 try { db.exec('ALTER TABLE entertainment ADD COLUMN calibre_id INTEGER'); } catch (e) {}
 try { db.exec('ALTER TABLE entertainment ADD COLUMN calibre_path TEXT'); } catch (e) {}
 try { db.exec('ALTER TABLE entertainment ADD COLUMN library TEXT'); } catch (e) {}
+// 迁移：entertainment 增加书架/阅读历史字段
+try { db.exec('ALTER TABLE entertainment ADD COLUMN shelf INTEGER DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN bookshelf_at TEXT'); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN last_read_at TEXT'); } catch (e) {}
 // 迁移：cook_posts / diet_logs → meals（合并饮食数据，type=cook 自己做 / eat_out 外食）
 try {
   db.exec(`INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating)
@@ -172,8 +176,8 @@ function readData() {
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
 
-  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library FROM entertainment').all()
-    .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '', author: r.author || '', publisher: r.publisher || '', formats: r.formats ? safeParse(r.formats, []) : [], calibreId: r.calibre_id, calibrePath: r.calibre_path || '', library: r.library || '' }));
+  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library,shelf,bookshelf_at,last_read_at FROM entertainment').all()
+    .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '', author: r.author || '', publisher: r.publisher || '', formats: r.formats ? safeParse(r.formats, []) : [], calibreId: r.calibre_id, calibrePath: r.calibre_path || '', library: r.library || '', shelf: r.shelf ? 1 : 0, bookshelfAt: r.bookshelf_at || '', lastReadAt: r.last_read_at || '' }));
 
   const rewardLog = db.prepare('SELECT id,ts,source,text,dw,dsw,bw,bsw FROM reward_log ORDER BY ts DESC, id DESC LIMIT 50').all()
     .map(r => ({ id: r.id, ts: r.ts || '', source: r.source || '', text: r.text || '', dw: r.dw || 0, dsw: r.dsw || 0, bw: r.bw || 0, bsw: r.bsw || 0 }));

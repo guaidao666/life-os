@@ -1204,8 +1204,10 @@
             <button class="btn btn-green" style="padding:5px 14px;font-size:13px;" onclick="openEntAdd()">➕ 添加作品</button>
           </div>
           <div id="entStats" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;"></div>
-          <div id="entLibBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
           <div id="entTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+          <div id="entViewBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
+          <div id="entLibBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
+          <div id="entGenreBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
           <div id="entSearchBar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
             <input class="input" id="entSearch" placeholder="🔍 搜索标题…" oninput="renderEntertainment()" style="max-width:260px;">
           </div>
@@ -2431,8 +2433,11 @@
     // ===== 娱乐中心 =====
     const ENT_TYPES = ['电视剧','电影','动漫','漫画','书籍','游戏','音乐'];
     const ENT_STATUS = ['未看','想追','在看','看完'];
+    const ENT_GENRES = ['全部','玄幻','武侠','历史','游戏','科幻','轻小说','言情','都市','悬疑'];
     let entCurrentTab = '电视剧';
     let entCurrentLib = 'literature';   // 默认文学书库（按 key）
+    let entView = 'all';                // all / shelf / history（仅书籍分类）
+    let entGenre = '全部';              // 题材过滤（仅书籍分类）
     let calibreLibs = [];               // [{name,key,path,count}]
     let calibreLibsLoaded = false;
     function libName(key) { const l = calibreLibs.find(x => x.key === key); return l ? l.name : key; }
@@ -2442,9 +2447,14 @@
       if (!wrap) return;
       const all = data.entertainment || [];
       if (!calibreLibsLoaded) { calibreLibsLoaded = true; loadCalibreLibs(); }
+      const isBook = entCurrentTab === '书籍';
       let list = all.filter(e => e.type === entCurrentTab);
-      if (entCurrentTab === '书籍' && entCurrentLib !== 'all') {
-        list = list.filter(e => e.library === entCurrentLib);
+      // 书籍分类：视图 / 书库 / 题材 三级过滤
+      if (isBook) {
+        if (entView === 'shelf') list = list.filter(e => e.shelf === 1);
+        else if (entView === 'history') list = list.filter(e => e.lastReadAt).sort((a,b) => (b.lastReadAt||'').localeCompare(a.lastReadAt||''));
+        if (entCurrentLib !== 'all') list = list.filter(e => e.library === entCurrentLib);
+        if (entGenre !== '全部') list = list.filter(e => (e.tags||[]).some(t => (t||'').includes(entGenre)));
       }
       const sc = document.getElementById('entStats');
       if (sc) {
@@ -2462,9 +2472,19 @@
           return `<div class="food-tab ${t === entCurrentTab ? 'active' : ''}" onclick="switchEntTab('${t}')">${t} <span style="opacity:.55;font-size:12px;">${n}</span></div>`;
         }).join('');
       }
+      // 视图切换条（仅书籍）
+      const vb = document.getElementById('entViewBar');
+      if (vb) {
+        if (isBook) {
+          vb.style.display = 'flex';
+          const views = [['all','🏠 全部书籍'],['shelf','📚 我的书架'],['history','📖 阅读历史']];
+          vb.innerHTML = views.map(v => `<div class="food-tab ${v[0] === entView ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick="switchEntView('${v[0]}')">${v[1]}</div>`).join('');
+        } else { vb.style.display = 'none'; }
+      }
+      // 书库切换条（仅书籍）
       const lb = document.getElementById('entLibBar');
       if (lb) {
-        if (entCurrentTab === '书籍') {
+        if (isBook) {
           lb.style.display = 'flex';
           const opts = [{name:'全部(含Obsidian)', key:'all'}, ...calibreLibs.map(l => ({name:l.name, key:l.key}))];
           lb.innerHTML = '<span style="font-size:12px;color:var(--text-secondary);">书库：</span>' + opts.map(o => `<div class="food-tab ${o.key === entCurrentLib ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick="switchEntLib('${o.key}')">${escapeHtml(o.name)}</div>`).join('') + `<button class="btn btn-blue" style="padding:3px 10px;font-size:12px;" onclick="syncCalibre('${entCurrentLib}')" id="entSyncCalibreBtn">🔄 同步当前书库</button>`;
@@ -2472,10 +2492,20 @@
           lb.style.display = 'none';
         }
       }
+      // 题材分类条（仅书籍）
+      const gb = document.getElementById('entGenreBar');
+      if (gb) {
+        if (isBook) {
+          gb.style.display = 'flex';
+          gb.innerHTML = ENT_GENRES.map(g => `<div class="food-tab ${g === entGenre ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick="switchEntGenre('${escapeHtml(g)}')">${escapeHtml(g)}</div>`).join('');
+        } else {
+          gb.style.display = 'none';
+        }
+      }
       const q = (document.getElementById('entSearch').value || '').trim().toLowerCase();
       const filtered = q ? list.filter(e => (e.title || '').toLowerCase().includes(q)) : list;
       if (!filtered.length) {
-        wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎞️</div>' + (q ? '没有匹配的作品' : '这个分类还没有作品，点「🔄 同步」从 Obsidian 导入，或「➕ 添加」') + '</div>';
+        wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎞️</div>' + (q ? '没有匹配的作品' : (isBook && entView === 'shelf' ? '书架还是空的，点开一本书选「📚 加入书架」' : '这个分类还没有作品，点「🔄 同步」从 Obsidian 导入，或「➕ 添加」')) + '</div>';
         return;
       }
       wrap.innerHTML = filtered.map(e => {
@@ -2483,8 +2513,8 @@
         const stBadge = e.status ? `<span class="tag" style="background:${sColor};color:#fff;font-size:11px;">${escapeHtml(e.status)}</span>` : '';
         const rating = e.rating ? `<span>⭐ ${e.rating}</span>` : '';
         const cover = e.cover
-          ? `<img src="${e.cover}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
-          : `<div style="width:100%;height:120px;border-radius:10px;margin-bottom:8px;background:linear-gradient(135deg,rgba(175,82,222,.18),rgba(90,200,250,.18));display:flex;align-items:center;justify-content:center;font-size:34px;">🎬</div>`;
+          ? `<img src="${e.cover}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
+          : `<div style="width:100%;aspect-ratio:2/3;border-radius:10px;margin-bottom:8px;background:linear-gradient(135deg,rgba(175,82,222,.18),rgba(90,200,250,.18));display:flex;align-items:center;justify-content:center;font-size:34px;">🎬</div>`;
         return `<div class="book-card" onclick="showEnt(${e.id})" style="cursor:pointer;position:relative;">
           ${e.library && e.library !== 'obsidian' ? `<span class="tag" style="position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;">📚 ${escapeHtml(libName(e.library))}</span>` : ''}
           ${cover}
@@ -2502,6 +2532,8 @@
       renderEntertainment();
     }
     function switchEntLib(key) { entCurrentLib = key; renderEntertainment(); }
+    function switchEntView(v) { entView = v; renderEntertainment(); }
+    function switchEntGenre(g) { entGenre = g; renderEntertainment(); }
     function syncCalibre(lib, silent) {
       if (lib === 'all') { foodToast('请选择具体书库再同步'); return; }
       const btn = document.getElementById('entSyncCalibreBtn');
@@ -2540,9 +2572,12 @@
         if (meta) html += `<div style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">${escapeHtml(meta)}</div>`;
         if (e.calibreId) {
           html += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;">
-            <a class="btn btn-blue" href="calibre://show-book/${escapeHtml(e.library||'')}/${e.calibreId}" target="_blank" rel="noopener">📖 用 Calibre 打开</a>
+            <a class="btn btn-blue" href="calibre://show-book/${escapeHtml(e.library||'')}/${e.calibreId}" target="_blank" rel="noopener" onclick="touchRead(${e.id})">📖 用 Calibre 打开</a>
             <button class="btn" onclick="openCalibreFolder(${e.id})">📂 打开文件位置</button>
+            <button class="btn ${e.shelf ? 'btn-green' : ''}" onclick="toggleShelf(${e.id})">${e.shelf ? '✅ 已在书架' : '📚 加入书架'}</button>
           </div>`;
+        } else {
+          html += `<div style="margin-bottom:10px;"><button class="btn ${e.shelf ? 'btn-green' : ''}" onclick="toggleShelf(${e.id})">${e.shelf ? '✅ 已在书架' : '📚 加入书架'}</button></div>`;
         }
       }
       if (e.url) html += `<div style="margin-bottom:10px;"><a class="btn btn-blue" href="${escapeHtml(e.url)}" target="_blank" rel="noopener">🔗 观看 / 资源</a></div>`;
@@ -2557,6 +2592,7 @@
     function showEnt(id) {
       const e = (data.entertainment || []).find(x => x.id === id);
       if (!e) return;
+      touchRead(id);
       const back = document.getElementById('entDetailBack');
       if (back) back.textContent = '← 返回' + entCurrentTab;
       const p = document.getElementById('entDetailPanel'); if (p) p.style.display = '';
@@ -2578,6 +2614,23 @@
       fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'entertainment', id: id, fields: { status: st } }) })
         .then(r => r.json()).then(() => { const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e); renderEntertainment(); })
         .catch(() => { const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e); renderEntertainment(); });
+    }
+    function toggleShelf(id) {
+      const e = (data.entertainment || []).find(x => x.id === id);
+      if (!e) return;
+      e.shelf = e.shelf ? 0 : 1;
+      const fields = { shelf: e.shelf };
+      if (e.shelf) fields.bookshelf_at = new Date().toISOString();
+      fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'entertainment', id: id, fields }) })
+        .then(r => r.json()).then(() => { const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e); renderEntertainment(); })
+        .catch(() => { const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e); renderEntertainment(); });
+    }
+    function touchRead(id) {
+      const e = (data.entertainment || []).find(x => x.id === id);
+      if (!e) return;
+      e.lastReadAt = new Date().toISOString();
+      fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'entertainment', id: id, fields: { last_read_at: e.lastReadAt } }) })
+        .catch(() => {});
     }
     function syncEntertainment() {
       const btn = (typeof event !== 'undefined' && event && event.target) ? event.target : null;
