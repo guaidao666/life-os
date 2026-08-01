@@ -1268,7 +1268,7 @@
           <div id="entLibBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
           <div id="entGenreBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
           <div id="entSearchBar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-            <input class="input" id="entSearch" placeholder="🔍 搜索标题…" oninput="renderEntertainment()" style="max-width:260px;">
+            <input class="input" id="entSearch" placeholder="🔍 搜索标题…" oninput="entSearchInput()" style="max-width:260px;">
           </div>
           <div id="entGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;"></div>
           <div id="entListView" style="display:none;"></div>
@@ -2129,22 +2129,31 @@
         document.getElementById('diaryContent').focus();
       }
     }
+    let diaryPage = 1;
+    const DIARY_PAGE_SIZE = 50;
     function renderDiary() {
       const list = document.getElementById('diaryList');
       if (!list) return;
       const items = data.diary || [];
-      list.innerHTML = items.length ? items.map(d => `
+      const totalPages = Math.max(1, Math.ceil(items.length / DIARY_PAGE_SIZE));
+      if (diaryPage > totalPages) diaryPage = totalPages;
+      if (diaryPage < 1) diaryPage = 1;
+      const pageItems = items.slice((diaryPage - 1) * DIARY_PAGE_SIZE, diaryPage * DIARY_PAGE_SIZE);
+      list.innerHTML = pageItems.length ? pageItems.map(d => `
         <div class="diary-item" onclick="openDiary(${d.id})">
           <div class="diary-item-head"><span class="diary-date">${escapeHtml(d.date)}</span>${d.mood ? `<span class="diary-mood-mini">${d.mood}</span>` : ''}<span class="diary-title">${escapeHtml(d.title || '无标题')}</span></div>
           <div class="diary-snippet">${escapeHtml((d.content || '').slice(0, 90))}${(d.content || '').length > 90 ? '…' : ''}</div>
         </div>`).join('') : '<div class="empty-state" style="padding:20px;">还没有日记，写第一篇吧</div>';
+      upsertPager(list, items.length, DIARY_PAGE_SIZE, diaryPage, 'goDiaryPage');
       renderDiaryCalendar();
     }
+    function goDiaryPage(p) { diaryPage = p; renderDiary(); }
     let ddMood = '';
     function openDiary(id) {
       const d = (data.diary || []).find(x => x.id === id);
       if (!d) return;
       document.getElementById('diaryList').style.display = 'none';
+      const dp = document.getElementById('diaryList_pager'); if (dp) dp.style.display = 'none';
       document.getElementById('diaryDetailPanel').style.display = '';
       ddMood = d.mood || '';
       document.getElementById('diaryDetailBody').innerHTML = diaryDetailHtml(d);
@@ -2152,7 +2161,8 @@
     }
     function closeDiaryDetail() {
       document.getElementById('diaryDetailPanel').style.display = 'none';
-      document.getElementById('diaryList').style.display = '';
+      const dl = document.getElementById('diaryList'); if (dl) dl.style.display = '';
+      renderDiary();
     }
     function selectDdMood(el) {
       document.querySelectorAll('.dd-mood').forEach(m => m.classList.remove('selected'));
@@ -2506,7 +2516,34 @@
     let calibreLibsLoaded = false;
     let entNavOpen = false;             // 侧边栏娱乐中心子菜单是否展开
     let entReadmeView = 'card';         // card / list / doc（分类级视图：卡片墙 / 清单 / Obsidian笔记）
+    let entPage = 1;                    // 当前页码（卡片视图分页用）
+    const ENT_PAGE_SIZE = 100;          // 每页展示 100 本，避免一次性渲染上万本卡死浏览器
+    let entFilteredCache = [];          // 当前筛选结果（全量缓存，用于翻页切片）
+    let entSearchTimer = null;          // 搜索防抖计时器
     function libName(key) { const l = calibreLibs.find(x => x.key === key); return l ? l.name : key; }
+
+    // 通用翻页条：在 container 之后插入/更新一个分页控件；goFnName 为全局切页函数名
+    function upsertPager(container, total, pageSize, curPage, goFnName) {
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if (curPage > totalPages) curPage = totalPages;
+      if (curPage < 1) curPage = 1;
+      let pager = document.getElementById(container.id + '_pager');
+      if (!pager) {
+        pager = document.createElement('div');
+        pager.id = container.id + '_pager';
+        pager.style.cssText = 'display:flex;gap:10px;align-items:center;justify-content:center;margin:14px 0;flex-wrap:wrap;';
+        container.insertAdjacentElement('afterend', pager);
+      }
+      if (!total || totalPages <= 1) { pager.style.display = 'none'; return curPage; }
+      pager.style.display = 'flex';
+      const prevDisabled = curPage <= 1 ? 'disabled style="opacity:.4;cursor:default;"' : '';
+      const nextDisabled = curPage >= totalPages ? 'disabled style="opacity:.4;cursor:default;"' : '';
+      pager.innerHTML =
+        '<span style="font-size:13px;color:var(--text-secondary);">共 ' + total + ' 条 · 第 ' + curPage + ' / ' + totalPages + ' 页</span>' +
+        '<button class="btn" ' + prevDisabled + ' onclick="' + goFnName + '(' + (curPage - 1) + ')">‹ 上一页</button>' +
+        '<button class="btn" ' + nextDisabled + ' onclick="' + goFnName + '(' + (curPage + 1) + ')">下一页 ›</button>';
+      return curPage;
+    }
 
     function renderEntertainment() {
       const wrap = document.getElementById('entGrid');
@@ -2529,6 +2566,7 @@
 
       if (entReadmeView !== 'card') {
         if (wrap) wrap.style.display = 'none';
+        const pg0 = document.getElementById('entPager'); if (pg0) pg0.style.display = 'none';
         const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = 'none';
         const vb = document.getElementById('entViewBar'); if (vb) vb.style.display = 'none';
         const lb = document.getElementById('entLibBar'); if (lb) lb.style.display = 'none';
@@ -2592,27 +2630,78 @@
       }
       const q = (document.getElementById('entSearch').value || '').trim().toLowerCase();
       const filtered = q ? list.filter(e => (e.title || '').toLowerCase().includes(q)) : list;
-      if (!filtered.length) {
+      entFilteredCache = filtered;
+      entPage = 1;
+      renderEntPage(isBook, q);
+    }
+
+    function entCardHtml(e) {
+      const sColor = ({'看完':'var(--green)','在看':'var(--blue)','想追':'var(--orange)','未看':'var(--text-secondary)'}[e.status] || '');
+      const stBadge = e.status ? `<span class="tag" style="background:${sColor};color:#fff;font-size:11px;">${escapeHtml(e.status)}</span>` : '';
+      const rating = e.rating ? `<span>⭐ ${e.rating}</span>` : '';
+      const cover = e.cover
+        ? `<img src="${e.cover}" loading="lazy" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
+        : `<div style="width:100%;aspect-ratio:2/3;border-radius:10px;margin-bottom:8px;background:linear-gradient(135deg,rgba(175,82,222,.18),rgba(90,200,250,.18));display:flex;align-items:center;justify-content:center;font-size:34px;">🎬</div>`;
+      return `<div class="book-card" onclick="showEnt(${e.id})" style="cursor:pointer;position:relative;">
+        ${e.library && e.library !== 'obsidian' ? `<span class="tag" style="position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;">📚 ${escapeHtml(libName(e.library))}</span>` : ''}
+        ${cover}
+        <div style="font-weight:700;font-size:15px;">${escapeHtml(e.title)}</div>
+        ${e.author ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${escapeHtml(e.author)}</div>` : ''}
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${stBadge}${rating}</div>
+        ${e.tags && e.tags.length ? `<div style="margin-top:6px;">${e.tags.slice(0,3).map(t => `<span class="tag" style="font-size:11px;">${escapeHtml(t)}</span>`).join(' ')}</div>` : ''}
+        ${(e.formats && e.formats.length) ? `<div style="margin-top:6px;">${e.formats.slice(0,3).map(f => `<span class="tag" style="font-size:10px;">${escapeHtml(f)}</span>`).join(' ')}</div>` : ''}
+      </div>`;
+    }
+
+    // 只渲染当前页的卡片（默认 100 本/页），避免一次性渲染上万本卡死浏览器
+    function renderEntPage(isBook, q) {
+      const wrap = document.getElementById('entGrid');
+      if (!wrap) return;
+      const total = entFilteredCache.length;
+      const totalPages = Math.max(1, Math.ceil(total / ENT_PAGE_SIZE));
+      if (entPage > totalPages) entPage = totalPages;
+      if (entPage < 1) entPage = 1;
+      const start = (entPage - 1) * ENT_PAGE_SIZE;
+      const pageItems = entFilteredCache.slice(start, start + ENT_PAGE_SIZE);
+      if (!pageItems.length) {
         wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎞️</div>' + (q ? '没有匹配的作品' : (isBook && entView === 'shelf' ? '书架还是空的，点开一本书选「📚 加入书架」' : '这个分类还没有作品，点「🔄 同步」从 Obsidian 导入，或「➕ 添加」')) + '</div>';
-        return;
+      } else {
+        wrap.innerHTML = pageItems.map(entCardHtml).join('');
       }
-      wrap.innerHTML = filtered.map(e => {
-        const sColor = ({'看完':'var(--green)','在看':'var(--blue)','想追':'var(--orange)','未看':'var(--text-secondary)'}[e.status] || '');
-        const stBadge = e.status ? `<span class="tag" style="background:${sColor};color:#fff;font-size:11px;">${escapeHtml(e.status)}</span>` : '';
-        const rating = e.rating ? `<span>⭐ ${e.rating}</span>` : '';
-        const cover = e.cover
-          ? `<img src="${e.cover}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
-          : `<div style="width:100%;aspect-ratio:2/3;border-radius:10px;margin-bottom:8px;background:linear-gradient(135deg,rgba(175,82,222,.18),rgba(90,200,250,.18));display:flex;align-items:center;justify-content:center;font-size:34px;">🎬</div>`;
-        return `<div class="book-card" onclick="showEnt(${e.id})" style="cursor:pointer;position:relative;">
-          ${e.library && e.library !== 'obsidian' ? `<span class="tag" style="position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;">📚 ${escapeHtml(libName(e.library))}</span>` : ''}
-          ${cover}
-          <div style="font-weight:700;font-size:15px;">${escapeHtml(e.title)}</div>
-          ${e.author ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${escapeHtml(e.author)}</div>` : ''}
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${stBadge}${rating}</div>
-          ${e.tags && e.tags.length ? `<div style="margin-top:6px;">${e.tags.slice(0,3).map(t => `<span class="tag" style="font-size:11px;">${escapeHtml(t)}</span>`).join(' ')}</div>` : ''}
-          ${(e.formats && e.formats.length) ? `<div style="margin-top:6px;">${e.formats.slice(0,3).map(f => `<span class="tag" style="font-size:10px;">${escapeHtml(f)}</span>`).join(' ')}</div>` : ''}
-        </div>`;
-      }).join('');
+      renderEntPager(total, totalPages);
+    }
+
+    function renderEntPager(total, totalPages) {
+      let pager = document.getElementById('entPager');
+      if (!pager) {
+        const grid = document.getElementById('entGrid');
+        if (!grid) return;
+        pager = document.createElement('div');
+        pager.id = 'entPager';
+        pager.style.cssText = 'display:flex;gap:10px;align-items:center;justify-content:center;margin:18px 0;flex-wrap:wrap;';
+        grid.insertAdjacentElement('afterend', pager);
+      }
+      if (!total) { pager.style.display = 'none'; return; }
+      pager.style.display = 'flex';
+      const prevDisabled = entPage <= 1 ? 'disabled style="opacity:.4;cursor:default;"' : '';
+      const nextDisabled = entPage >= totalPages ? 'disabled style="opacity:.4;cursor:default;"' : '';
+      pager.innerHTML =
+        '<span style="font-size:13px;color:var(--text-secondary);">共 ' + total + ' 本 · 第 ' + entPage + ' / ' + totalPages + ' 页</span>' +
+        '<button class="btn" ' + prevDisabled + ' onclick="entGoPage(' + (entPage - 1) + ')">‹ 上一页</button>' +
+        '<button class="btn" ' + nextDisabled + ' onclick="entGoPage(' + (entPage + 1) + ')">下一页 ›</button>';
+    }
+
+    function entGoPage(p) {
+      entPage = p;
+      renderEntPage(entCurrentTab === '书籍', (document.getElementById('entSearch').value || '').trim().toLowerCase());
+      const sec = document.getElementById('sec-entertainment');
+      const main = document.querySelector('.main');
+      if (sec && main) main.scrollTop = Math.max(0, sec.offsetTop - 12);
+    }
+
+    function entSearchInput() {
+      clearTimeout(entSearchTimer);
+      entSearchTimer = setTimeout(() => { entPage = 1; renderEntertainment(); }, 250);
     }
 
     function switchEntTab(t) {
@@ -3195,13 +3284,19 @@
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">📂 ${escapeHtml(x.source || '')}</div>
       </div>`).join('');
     }
+    let cookPage = 1, mealPage = 1;
+    const MEAL_PAGE_SIZE = 50;
     function renderCookFeed() {
       const feed = document.getElementById('cookFeed');
       if (!feed) return;
       const posts = (data.food.meals || []).filter(m => m.type === 'cook').slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const totalPages = Math.max(1, Math.ceil(posts.length / MEAL_PAGE_SIZE));
+      if (cookPage > totalPages) cookPage = totalPages;
+      if (cookPage < 1) cookPage = 1;
+      const pagePosts = posts.slice((cookPage - 1) * MEAL_PAGE_SIZE, cookPage * MEAL_PAGE_SIZE);
       if (!posts.length) feed.innerHTML = '<div class="empty-state">还没有记录，点上方按钮发布第一道菜吧 🍳</div>';
-      else feed.innerHTML = posts.map(p => {
-        const imgs = (p.images || []).map(u => '<img src="' + u + '" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:6px;cursor:pointer;" onclick="window.open(\'' + u + '\',\'_blank\')">').join('');
+      else feed.innerHTML = pagePosts.map(p => {
+        const imgs = (p.images || []).map(u => '<img src="' + u + '" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:6px;cursor:pointer;" onclick="window.open(\'' + u + '\',\'_blank\')">').join('');
         const stars = '★'.repeat(p.rating || 0) + '☆'.repeat(5 - (p.rating || 0));
         const recipe = (data.food.recipes || []).find(r => r.id === p.recipeId);
         const recipeTag = recipe ? '<div style="margin:6px 0;"><span style="font-size:12px;color:var(--blue);">📎 ' + escapeHtml(recipe.name) + '</span></div>' : '';
@@ -3219,14 +3314,20 @@
           '</div>' +
         '</div>';
       }).join('');
+      upsertPager(feed, posts.length, MEAL_PAGE_SIZE, cookPage, 'goCookPage');
     }
+    function goCookPage(p) { cookPage = p; renderCookFeed(); }
 
     function renderMealLog() {
       const list = document.getElementById('mealLogList');
       if (!list) return;
       const meals = (data.food.meals || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const totalPages = Math.max(1, Math.ceil(meals.length / MEAL_PAGE_SIZE));
+      if (mealPage > totalPages) mealPage = totalPages;
+      if (mealPage < 1) mealPage = 1;
+      const pageMeals = meals.slice((mealPage - 1) * MEAL_PAGE_SIZE, mealPage * MEAL_PAGE_SIZE);
       if (!meals.length) list.innerHTML = '<div class="empty-state">暂无饮食记录，点上方按钮记一笔吧</div>';
-      else list.innerHTML = meals.map(m => {
+      else list.innerHTML = pageMeals.map(m => {
         const stars = m.rating ? '<span style="color:var(--orange);">★'.repeat(m.rating) + '</span>' : '';
         const actions = '<span style="font-size:12px;color:var(--blue);cursor:pointer;" onclick="' + (m.type === 'cook' ? ('openCookModal(' + m.id + ')') : ('editMeal(' + m.id + ')')) + '">✏️ 编辑</span> <span style="font-size:12px;color:#ff453a;cursor:pointer;" onclick="deleteMeal(' + m.id + ')">🗑️ 删除</span>';
         return '<div class="record-item" style="align-items:flex-start;"><div style="flex:1;">' +
@@ -3234,7 +3335,9 @@
           '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">' + escapeHtml(m.date || '') + (m.feeling ? (' · ' + escapeHtml(m.feeling.slice(0, 30))) : '') + '</div>' +
           '</div><div style="display:flex;gap:12px;white-space:nowrap;">' + actions + '</div></div>';
       }).join('');
+      upsertPager(list, meals.length, MEAL_PAGE_SIZE, mealPage, 'goMealPage');
     }
+    function goMealPage(p) { mealPage = p; renderMealLog(); }
 
     let cookEditId = null;
     let cookPendingImages = [];
