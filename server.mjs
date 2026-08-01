@@ -96,6 +96,14 @@ try { db.exec('ALTER TABLE entertainment ADD COLUMN library TEXT'); } catch (e) 
 try { db.exec('ALTER TABLE entertainment ADD COLUMN shelf INTEGER DEFAULT 0'); } catch (e) {}
 try { db.exec('ALTER TABLE entertainment ADD COLUMN bookshelf_at TEXT'); } catch (e) {}
 try { db.exec('ALTER TABLE entertainment ADD COLUMN last_read_at TEXT'); } catch (e) {}
+// 娱乐中心：Obsidian README 解析清单（分类分区 + 作品名 + 关联卡片）
+db.exec(`CREATE TABLE IF NOT EXISTS ent_readme_lists (
+  id INTEGER PRIMARY KEY, type TEXT, section TEXT, title TEXT, note TEXT, linked_ent_id INTEGER DEFAULT 0
+)`);
+// 娱乐中心：Obsidian README 原始 Markdown（用于「Obsidian 笔记」tab 渲染）
+db.exec(`CREATE TABLE IF NOT EXISTS ent_readme_doc (
+  type TEXT PRIMARY KEY, content TEXT
+)`);
 // 迁移：cook_posts / diet_logs → meals（合并饮食数据，type=cook 自己做 / eat_out 外食）
 try {
   db.exec(`INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating)
@@ -179,6 +187,11 @@ function readData() {
   const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library,shelf,bookshelf_at,last_read_at FROM entertainment').all()
     .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '', author: r.author || '', publisher: r.publisher || '', formats: r.formats ? safeParse(r.formats, []) : [], calibreId: r.calibre_id, calibrePath: r.calibre_path || '', library: r.library || '', shelf: r.shelf ? 1 : 0, bookshelfAt: r.bookshelf_at || '', lastReadAt: r.last_read_at || '' }));
 
+  const entReadmeLists = db.prepare('SELECT id,type,section,title,note,linked_ent_id FROM ent_readme_lists ORDER BY id').all()
+    .map(r => ({ id: r.id, type: r.type || '', section: r.section || '', title: r.title || '', note: r.note || '', linkedEntId: r.linked_ent_id || 0 }));
+  const entReadmeDoc = {};
+  db.prepare('SELECT type,content FROM ent_readme_doc').all().forEach(r => { entReadmeDoc[r.type] = r.content || ''; });
+
   const rewardLog = db.prepare('SELECT id,ts,source,text,dw,dsw,bw,bsw FROM reward_log ORDER BY ts DESC, id DESC LIMIT 50').all()
     .map(r => ({ id: r.id, ts: r.ts || '', source: r.source || '', text: r.text || '', dw: r.dw || 0, dsw: r.dsw || 0, bw: r.bw || 0, bsw: r.bsw || 0 }));
 
@@ -216,6 +229,8 @@ function readData() {
     diary,
     rewardLog,
     entertainment,
+    entReadmeLists,
+    entReadmeDoc,
     theme
   };
 }
@@ -767,6 +782,59 @@ const server = http.createServer(async (req, res) => {
     return inserted;
   }
 
+  // ---- 解析 Obsidian 娱乐分类 README：分区清单 + 原始 Markdown ----
+  function parseEntertainmentReadmes() {
+    const entDir = path.join(VAULT, '娱乐');
+    const types = ['电视剧', '电影', '动漫', '漫画', '书籍', '游戏', '音乐'];
+    db.exec('BEGIN');
+    try {
+      db.exec('DELETE FROM ent_readme_lists');
+      db.exec('DELETE FROM ent_readme_doc');
+      const insList = db.prepare('INSERT INTO ent_readme_lists (id,type,section,title,note,linked_ent_id) VALUES (?,?,?,?,?,?)');
+      const insDoc = db.prepare('INSERT OR REPLACE INTO ent_readme_doc (type,content) VALUES (?,?)');
+      let idc = 0;
+    for (const type of types) {
+      const rd = path.join(entDir, type, 'README.md');
+      if (!existsSync(rd)) continue;
+      const text = readMdSafe(rd);
+      insDoc.run(type, text);
+      const titles = db.prepare('SELECT id,title FROM entertainment WHERE type=?').all(type);
+      const titleMap = {};
+      titles.forEach(r => { titleMap[String(r.title).trim()] = r.id; });
+      let curSection = '（未分区）';
+      for (const lineRaw of text.split(/\r?\n/)) {
+        const h = lineRaw.match(/^#{1,4}\s+(.+?)\s*$/);
+        if (h) { curSection = h[1].replace(/\*\*/g, '').trim(); continue; }
+        const li = lineRaw.match(/^\s*[-*]\s+(.+?)\s*$/);
+        if (!li) continue;
+        let raw = li[1].trim();
+        // 跳过纯脚注引用
+        if (/^\[\^[\w-]+\]$/.test(raw)) continue;
+        if (/^\[\^[\w-]+\]:/.test(raw)) continue;
+        // 去 Obsidian 图片嵌入 / 双链
+        let item = raw.replace(/!\[\[[^\]]+\]\]/g, '').replace(/\[\[([^\]]+)\]\]/g, '$1').trim();
+        if (!item) continue;
+        let title = item, note = '';
+        const linkM = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (linkM) { title = linkM[1]; }
+        else {
+          const sep = item.match(/^(.+?)[：:\-]\s*(.+)$/);
+          if (sep) { title = sep[1].trim(); note = sep[2].trim(); }
+        }
+        title = title.replace(/\*\*/g, '').replace(/[「」]/g, '').trim();
+        if (!title) continue;
+        const linked = titleMap[title] || 0;
+        insList.run(idc++, type, curSection, title, note, linked);
+      }
+    }
+      db.exec('COMMIT');
+      return idc;
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw e;
+    }
+  }
+
   // ---- Calibre 书库配置（.calibrelibraries）----
   function loadCalibreLibs() {
     try {
@@ -849,9 +917,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url === '/api/sync-entertainment') {
     try {
       const inserted = parseEntertainment();
+      let readmeItems = 0;
+      try { readmeItems = parseEntertainmentReadmes(); } catch (re) { console.error('PARSE-README ERROR:', re && re.stack ? re.stack : re); }
       const total = db.prepare('SELECT COUNT(*) AS c FROM entertainment').get().c;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, inserted, total }));
+      res.end(JSON.stringify({ ok: true, inserted, readmeItems, total }));
     } catch (e) {
       console.error('SYNC-ENT ERROR:', e && e.stack ? e.stack : e);
     res.writeHead(500, { 'Content-Type': 'application/json' });

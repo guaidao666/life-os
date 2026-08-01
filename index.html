@@ -1232,6 +1232,7 @@
           </div>
           <div id="entStats" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;"></div>
           <div id="entCatLabel" style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;"></div>
+          <div id="entReadmeViewBar" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
           <div id="entViewBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
           <div id="entLibBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
           <div id="entGenreBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
@@ -1239,6 +1240,8 @@
             <input class="input" id="entSearch" placeholder="🔍 搜索标题…" oninput="renderEntertainment()" style="max-width:260px;">
           </div>
           <div id="entGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;"></div>
+          <div id="entListView" style="display:none;"></div>
+          <div id="entDocView" style="display:none;line-height:1.7;"></div>
           <div id="entDetailPanel" style="display:none;">
             <div style="margin-bottom:14px;"><button class="btn" onclick="closeEntDetail()" id="entDetailBack">← 返回</button></div>
             <div id="entDetailBody"></div>
@@ -2471,6 +2474,7 @@
     let calibreLibs = [];               // [{name,key,path,count}]
     let calibreLibsLoaded = false;
     let entNavOpen = false;             // 侧边栏娱乐中心子菜单是否展开
+    let entReadmeView = 'card';         // card / list / doc（分类级视图：卡片墙 / 清单 / Obsidian笔记）
     function libName(key) { const l = calibreLibs.find(x => x.key === key); return l ? l.name : key; }
 
     function renderEntertainment() {
@@ -2479,6 +2483,36 @@
       const all = data.entertainment || [];
       if (!calibreLibsLoaded) { calibreLibsLoaded = true; loadCalibreLibs(); }
       const isBook = entCurrentTab === '书籍';
+      const cn = document.getElementById('entCatName');
+      if (cn) cn.textContent = entCurrentTab;
+      const cl = document.getElementById('entCatLabel');
+      if (cl) cl.textContent = '当前分类：' + entCurrentTab;
+      renderEntSubNav();
+
+      // 分类级视图切换条（卡片 / 清单 / Obsidian笔记）——所有分类都显示
+      const rvb = document.getElementById('entReadmeViewBar');
+      if (rvb) {
+        const rviews = [['card','🃏 卡片'],['list','📋 清单'],['doc','📝 Obsidian笔记']];
+        rvb.innerHTML = rviews.map(v => `<div class="food-tab ${v[0] === entReadmeView ? 'active' : ''}" style="padding:4px 12px;font-size:13px;" onclick="switchEntReadmeView('${v[0]}')">${v[1]}</div>`).join('');
+      }
+
+      if (entReadmeView !== 'card') {
+        if (wrap) wrap.style.display = 'none';
+        const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = 'none';
+        const vb = document.getElementById('entViewBar'); if (vb) vb.style.display = 'none';
+        const lb = document.getElementById('entLibBar'); if (lb) lb.style.display = 'none';
+        const gb = document.getElementById('entGenreBar'); if (gb) gb.style.display = 'none';
+        const sc = document.getElementById('entStats'); if (sc) sc.style.display = 'none';
+        const lv = document.getElementById('entListView'); if (lv) lv.style.display = 'none';
+        const dv = document.getElementById('entDocView'); if (dv) dv.style.display = 'none';
+        if (entReadmeView === 'list') { renderEntList(); return; }
+        if (entReadmeView === 'doc') { renderEntDoc(); return; }
+      }
+
+      // —— 卡片视图 ——
+      if (wrap) wrap.style.display = 'grid';
+      const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = 'flex';
+      const sc = document.getElementById('entStats'); if (sc) sc.style.display = 'flex';
       let list = all.filter(e => e.type === entCurrentTab);
       // 书籍分类：视图 / 书库 / 题材 三级过滤
       if (isBook) {
@@ -2487,7 +2521,6 @@
         if (entCurrentLib !== 'all') list = list.filter(e => e.library === entCurrentLib);
         if (entGenre !== '全部') list = list.filter(e => (e.tags||[]).some(t => (t||'').includes(entGenre)));
       }
-      const sc = document.getElementById('entStats');
       if (sc) {
         const cnt = (st) => list.filter(e => e.status === st).length;
         sc.innerHTML = '<span class="pill" style="background:rgba(175,82,222,.12);color:var(--purple);">共 ' + list.length + '</span>' +
@@ -2496,11 +2529,6 @@
           '<span class="pill" style="background:rgba(255,149,0,.15);color:var(--orange);">想追 ' + cnt('想追') + '</span>' +
           '<span class="pill" style="background:rgba(120,120,128,.15);color:var(--text-secondary);">未看 ' + cnt('未看') + '</span>';
       }
-      const cn = document.getElementById('entCatName');
-      if (cn) cn.textContent = entCurrentTab;
-      const cl = document.getElementById('entCatLabel');
-      if (cl) cl.textContent = '当前分类：' + entCurrentTab;
-      renderEntSubNav();
       // 视图切换条（仅书籍）
       const vb = document.getElementById('entViewBar');
       if (vb) {
@@ -2559,6 +2587,118 @@
     function switchEntTab(t) {
       entCurrentTab = t;
       renderEntertainment();
+    }
+    function switchEntReadmeView(v) {
+      entReadmeView = v;
+      renderEntertainment();
+    }
+
+    // 清单视图：按 README 分区列出作品（来自 Obsidian）
+    function renderEntList() {
+      const box = document.getElementById('entListView');
+      if (!box) return;
+      box.style.display = 'block';
+      const lists = (data.entReadmeLists || []).filter(r => r.type === entCurrentTab);
+      if (!lists.length) {
+        box.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div>这个分类的 Obsidian 里还没有 README 清单，点「🔄 同步 Obsidian」试试。</div>';
+        return;
+      }
+      const secStatus = (sec) => {
+        if (/看完|已看|看过的|完结/.test(sec)) return 'var(--green)';
+        if (/追更|在看|追的|更新中/.test(sec)) return 'var(--blue)';
+        if (/未看|想看|没看|想追|待看|收藏/.test(sec)) return 'var(--orange)';
+        return 'var(--text-secondary)';
+      };
+      const groups = {};
+      lists.forEach(r => { (groups[r.section] = groups[r.section] || []).push(r); });
+      box.innerHTML = Object.keys(groups).map(sec => {
+        const items = groups[sec].map(r => {
+          const color = secStatus(sec);
+          const linked = r.linkedEntId > 0;
+          const main = linked
+            ? `<a href="javascript:void(0)" onclick="showEnt(${r.linkedEntId})" style="font-weight:600;color:var(--text-primary);text-decoration:none;">${escapeHtml(r.title)}</a>`
+            : `<span>${escapeHtml(r.title)}</span>`;
+          const extra = r.note ? ` <span style="color:var(--text-secondary);font-size:12px;">· ${escapeHtml(r.note)}</span>` : '';
+          const action = linked ? '' : ` <button class="btn" style="padding:1px 8px;font-size:11px;margin-left:4px;" onclick="createEntFromReadme('${escapeHtml(entCurrentTab)}','${escapeHtml(r.title)}','${escapeHtml(sec)}')">＋ 创建卡片</button>`;
+          return `<li style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px dashed var(--border);">${main}${extra}${action}</li>`;
+        }).join('');
+        return `<div style="margin-bottom:18px;">
+          <div style="font-weight:700;font-size:15px;color:${color};margin-bottom:6px;">${escapeHtml(sec)} <span style="font-size:12px;color:var(--text-secondary);font-weight:400;">(${groups[sec].length})</span></div>
+          <ul style="list-style:none;margin:0;padding:0 0 0 4px;">${items}</ul>
+        </div>`;
+      }).join('');
+    }
+
+    function createEntFromReadme(type, title, section) {
+      let status = '未看';
+      if (/看完|已看|完结/.test(section)) status = '看完';
+      else if (/追更|在看|更新中/.test(section)) status = '在看';
+      else if (/想追|想看|收藏|待看/.test(section)) status = '想追';
+      fetch('/api/insert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'entertainment', fields: { type, title, status, created_at: new Date().toISOString() } }) })
+        .then(r => r.json()).then(j => {
+          if (j.ok) { foodToast('✅ 已创建「' + title + '」卡片'); loadData().then(() => renderEntertainment()); }
+          else foodToast('❌ 创建失败：' + (j.error || ''));
+        }).catch(() => foodToast('❌ 创建出错'));
+    }
+
+    // Obsidian 笔记视图：渲染 README 原始 Markdown（轻量渲染器）
+    function renderEntDoc() {
+      const box = document.getElementById('entDocView');
+      if (!box) return;
+      box.style.display = 'block';
+      const md = (data.entReadmeDoc && data.entReadmeDoc[entCurrentTab]) || '';
+      if (!md.trim()) {
+        box.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div>这个分类的 Obsidian 里还没有 README 笔记，点「🔄 同步 Obsidian」试试。</div>';
+        return;
+      }
+      box.innerHTML = mdToHtml(md);
+    }
+
+    function mdToHtml(md) {
+      const footnotes = {};
+      md = md.replace(/^\[\^([\w-]+)\]:\s*(.+)$/gm, (m, id, txt) => { footnotes[id] = txt.trim(); return ''; });
+      const inline = (s) => {
+        s = escapeHtml(s);
+        s = s.replace(/!\[\[([^\]]+)\]\]/g, (m, n) => `<span style="color:var(--text-secondary);font-size:12px;">🖼️ ${n}</span>`);
+        s = s.replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, (m, n) => n);
+        s = s.replace(/\[\^([\w-]+)\]/g, (m, id) => `<sup><a href="#fn-${id}" style="color:var(--blue);">[${id}]</a></sup>`);
+        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, t, u) => `<a href="${u}" target="_blank" rel="noopener" style="color:var(--blue);">${t}</a>`);
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+        s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+        return s;
+      };
+      const lines = md.split(/\r?\n/);
+      let html = '', i = 0;
+      const isList = (l) => /^\s*[-*]\s+/.test(l);
+      while (i < lines.length) {
+        const line = lines[i];
+        if (!line.trim()) { i++; continue; }
+        const h = line.match(/^(#{1,4})\s+(.+)$/);
+        if (h) { const lv = h[1].length; html += `<h${lv} style="margin:14px 0 6px;">${inline(h[2])}</h${lv}>`; i++; continue; }
+        if (/^>\s?/.test(line)) {
+          const buf = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^>\s?/, '')); i++; }
+          html += `<blockquote style="border-left:3px solid var(--border);margin:8px 0;padding:4px 12px;color:var(--text-secondary);background:rgba(120,120,128,.06);border-radius:4px;">${inline(buf.join(' '))}</blockquote>`;
+          continue;
+        }
+        if (isList(line)) {
+          const buf = [];
+          while (i < lines.length && isList(lines[i])) { buf.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; }
+          html += '<ul style="margin:6px 0 10px;padding-left:20px;">' + buf.map(it => `<li style="margin:2px 0;">${inline(it)}</li>`).join('') + '</ul>';
+          continue;
+        }
+        const buf = [line]; i++;
+        while (i < lines.length && lines[i].trim() && !/^(#{1,4})\s/.test(lines[i]) && !isList(lines[i]) && !/^>\s?/.test(lines[i])) { buf.push(lines[i]); i++; }
+        html += `<p style="margin:6px 0;">${inline(buf.join(' '))}</p>`;
+      }
+      const fnIds = Object.keys(footnotes);
+      if (fnIds.length) {
+        html += '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0 8px;"><div style="font-size:12px;color:var(--text-secondary);">';
+        html += fnIds.map(id => `<div id="fn-${id}" style="margin:2px 0;"><sup>[${id}]</sup> ${inline(footnotes[id])}</div>`).join('');
+        html += '</div>';
+      }
+      return html;
     }
     function switchEntLib(key) { entCurrentLib = key; renderEntertainment(); }
     function switchEntView(v) { entView = v; renderEntertainment(); }
@@ -2660,15 +2800,16 @@
       if (back) back.textContent = '← 返回' + entCurrentTab;
       const p = document.getElementById('entDetailPanel'); if (p) p.style.display = '';
       const g = document.getElementById('entGrid'); if (g) g.style.display = 'none';
+      const lv = document.getElementById('entListView'); if (lv) lv.style.display = 'none';
+      const dv = document.getElementById('entDocView'); if (dv) dv.style.display = 'none';
       const cl = document.getElementById('entCatLabel'); if (cl) cl.style.display = 'none';
       const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = 'none';
       const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e);
     }
     function closeEntDetail() {
       const p = document.getElementById('entDetailPanel'); if (p) p.style.display = 'none';
-      const g = document.getElementById('entGrid'); if (g) g.style.display = 'grid';
       const cl = document.getElementById('entCatLabel'); if (cl) cl.style.display = '';
-      const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = '';
+      renderEntertainment();
     }
     function setEntStatus(id, st) {
       const e = (data.entertainment || []).find(x => x.id === id);
@@ -2701,7 +2842,7 @@
       fetch('/api/sync-entertainment', { method: 'POST' })
         .then(r => r.json()).then(j => {
           if (j.ok) {
-            loadData().then(() => { renderEntertainment(); foodToast('✅ 同步完成：新增 ' + j.inserted + ' 部，共 ' + j.total + ' 部'); });
+            loadData().then(() => { renderEntertainment(); foodToast('✅ 同步完成：新增 ' + j.inserted + ' 部，共 ' + j.total + ' 部；清单 ' + (j.readmeItems||0) + ' 条'); });
           } else { foodToast('❌ 同步失败：' + (j.error || '')); }
         })
         .catch(() => foodToast('❌ 同步出错'))
