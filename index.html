@@ -2973,7 +2973,8 @@
       if (e.quotes) html += `<div style="font-weight:600;margin:12px 0 6px;">台词记录</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.quotes)}</div>`;
       if (e.review) html += `<div style="font-weight:600;margin:12px 0 6px;">观后感</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.review)}</div>`;
       if (e.note) html += `<div style="font-weight:600;margin:12px 0 6px;">备注 / 攻略</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.note)}</div>`;
-      if (e.booknote) html += `<div style="font-weight:600;margin:14px 0 6px;">📖 书摘 / 读书笔记</div><div class="ent-booknote">${mdToHtml(e.booknote)}</div>`;
+      // 书摘必须始终是详情页最后一块（位于状态按钮/剧情/台词/观后感/备注之后）
+      if (e.booknote) html += `<div style="font-weight:600;margin:20px 0 6px;border-top:1px solid var(--border);padding-top:14px;">📖 书摘 / 读书笔记</div><div class="ent-booknote">${mdToHtml(e.booknote)}</div>`;
       return html;
     }
 
