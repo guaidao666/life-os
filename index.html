@@ -639,6 +639,7 @@
 
         <div class="nav-group-title">成长积累</div>
         <div class="nav-item" data-section="books" onclick="showSection('books')"><span class="nav-icon">📚</span>读书收获</div>
+        <div class="nav-item" data-section="entertainment" onclick="showSection('entertainment')"><span class="nav-icon">🎬</span>娱乐中心</div>
         <div class="nav-item" data-section="english" onclick="showSection('english')"><span class="nav-icon">🔤</span>英语学习</div>
         <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="nav-icon">🎯</span>项目/目标</div>
 
@@ -1194,6 +1195,46 @@
       </section>
 
       <!-- 7. 英语学习 -->
+      <!-- ===== 娱乐中心 ===== -->
+      <section class="section" id="sec-entertainment">
+        <div class="card">
+          <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            🎬 娱乐中心
+            <button class="btn btn-blue" style="margin-left:auto;padding:5px 14px;font-size:13px;" onclick="syncEntertainment()">🔄 同步 Obsidian</button>
+            <button class="btn btn-green" style="padding:5px 14px;font-size:13px;" onclick="openEntAdd()">➕ 添加作品</button>
+          </div>
+          <div id="entStats" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;"></div>
+          <div id="entTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+          <div id="entSearchBar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+            <input class="input" id="entSearch" placeholder="🔍 搜索标题…" oninput="renderEntertainment()" style="max-width:260px;">
+          </div>
+          <div id="entGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;"></div>
+          <div id="entDetailPanel" style="display:none;">
+            <div style="margin-bottom:14px;"><button class="btn" onclick="closeEntDetail()" id="entDetailBack">← 返回</button></div>
+            <div id="entDetailBody"></div>
+          </div>
+        </div>
+        <!-- 添加作品弹窗 -->
+        <div class="modal" id="entAddModal">
+          <div class="modal-box">
+            <div class="modal-title">➕ 添加作品</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin:12px 0;">
+              <input class="input" id="entAddTitle" placeholder="作品名">
+              <select class="input" id="entAddType">
+                <option>电视剧</option><option>电影</option><option>动漫</option><option>漫画</option><option>书籍</option><option>游戏</option><option>音乐</option>
+              </select>
+              <select class="input" id="entAddStatus">
+                <option value="">未知</option><option>未看</option><option>想追</option><option>在看</option><option>看完</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+              <button class="btn" onclick="closeEntAdd()">取消</button>
+              <button class="btn btn-green" onclick="addEnt()">保存</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" id="sec-english">
         <div class="grid-2">
           <div class="card">
@@ -1439,6 +1480,7 @@
       projects: [],
       resources: [],
       cook: { posts: [] },
+      entertainment: [],
       theme: {
         colors: { purple: '#af52de', cyan: '#5ac8fa', indigo: '#5856d6', blue: '#0071e3', green: '#34c759', orange: '#ff9500', pink: '#ff375f' },
         dark: false
@@ -2385,6 +2427,129 @@
       showRecipe(id, 'today');
     }
 
+    // ===== 娱乐中心 =====
+    const ENT_TYPES = ['电视剧','电影','动漫','漫画','书籍','游戏','音乐'];
+    const ENT_STATUS = ['未看','想追','在看','看完'];
+    let entCurrentTab = '电视剧';
+
+    function renderEntertainment() {
+      const wrap = document.getElementById('entGrid');
+      if (!wrap) return;
+      const all = data.entertainment || [];
+      const list = all.filter(e => e.type === entCurrentTab);
+      const sc = document.getElementById('entStats');
+      if (sc) {
+        const cnt = (st) => list.filter(e => e.status === st).length;
+        sc.innerHTML = '<span class="pill" style="background:rgba(175,82,222,.12);color:var(--purple);">共 ' + list.length + '</span>' +
+          '<span class="pill" style="background:rgba(52,199,89,.15);color:var(--green);">看完 ' + cnt('看完') + '</span>' +
+          '<span class="pill" style="background:rgba(0,113,227,.12);color:var(--blue);">在看 ' + cnt('在看') + '</span>' +
+          '<span class="pill" style="background:rgba(255,149,0,.15);color:var(--orange);">想追 ' + cnt('想追') + '</span>' +
+          '<span class="pill" style="background:rgba(120,120,128,.15);color:var(--text-secondary);">未看 ' + cnt('未看') + '</span>';
+      }
+      const tabs = document.getElementById('entTabs');
+      if (tabs) {
+        tabs.innerHTML = ENT_TYPES.map(t => {
+          const n = all.filter(e => e.type === t).length;
+          return `<div class="food-tab ${t === entCurrentTab ? 'active' : ''}" onclick="switchEntTab('${t}')">${t} <span style="opacity:.55;font-size:12px;">${n}</span></div>`;
+        }).join('');
+      }
+      const q = (document.getElementById('entSearch').value || '').trim().toLowerCase();
+      const filtered = q ? list.filter(e => (e.title || '').toLowerCase().includes(q)) : list;
+      if (!filtered.length) {
+        wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎞️</div>' + (q ? '没有匹配的作品' : '这个分类还没有作品，点「🔄 同步」从 Obsidian 导入，或「➕ 添加」') + '</div>';
+        return;
+      }
+      wrap.innerHTML = filtered.map(e => {
+        const sColor = ({'看完':'var(--green)','在看':'var(--blue)','想追':'var(--orange)','未看':'var(--text-secondary)'}[e.status] || '');
+        const stBadge = e.status ? `<span class="tag" style="background:${sColor};color:#fff;font-size:11px;">${escapeHtml(e.status)}</span>` : '';
+        const rating = e.rating ? `<span>⭐ ${e.rating}</span>` : '';
+        const cover = e.cover
+          ? `<img src="${e.cover}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
+          : `<div style="width:100%;height:120px;border-radius:10px;margin-bottom:8px;background:linear-gradient(135deg,rgba(175,82,222,.18),rgba(90,200,250,.18));display:flex;align-items:center;justify-content:center;font-size:34px;">🎬</div>`;
+        return `<div class="book-card" onclick="showEnt(${e.id})" style="cursor:pointer;position:relative;">
+          ${cover}
+          <div style="font-weight:700;font-size:15px;">${escapeHtml(e.title)}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${stBadge}${rating}</div>
+          ${e.tags && e.tags.length ? `<div style="margin-top:6px;">${e.tags.slice(0,3).map(t => `<span class="tag" style="font-size:11px;">${escapeHtml(t)}</span>`).join(' ')}</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function switchEntTab(t) { entCurrentTab = t; renderEntertainment(); }
+
+    function entDetailHtml(e) {
+      const sColor = ({'看完':'var(--green)','在看':'var(--blue)','想追':'var(--orange)','未看':'var(--text-secondary)'}[e.status] || '');
+      const stBadge = e.status ? `<span class="tag" style="background:${sColor};color:#fff;font-size:11px;">${escapeHtml(e.status)}</span>` : '';
+      const tags = (e.tags || []).map(t => `<span class="tag" style="font-size:11px;">${escapeHtml(t)}</span>`).join(' ');
+      let html = '';
+      if (e.cover) html += `<img src="${e.cover}" style="width:100%;max-height:260px;object-fit:cover;border-radius:12px;margin-bottom:12px;" onerror="this.style.display='none'">`;
+      html += `<div style="font-size:20px;font-weight:700;margin-bottom:6px;">🎬 ${escapeHtml(e.title)}</div>`;
+      html += `<div style="color:var(--text-secondary);font-size:14px;margin-bottom:8px;">${escapeHtml(e.type)}${e.rating ? ' · ⭐ ' + e.rating : ''} · ${stBadge}</div>`;
+      if (tags) html += `<div style="margin-bottom:10px;">${tags}</div>`;
+      if (e.url) html += `<div style="margin-bottom:10px;"><a class="btn btn-blue" href="${escapeHtml(e.url)}" target="_blank" rel="noopener">🔗 观看 / 资源</a></div>`;
+      html += `<div style="margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><span style="font-size:13px;color:var(--text-secondary);">状态：</span>${ENT_STATUS.map(s => `<button class="btn ${e.status === s ? 'btn-green' : ''}" style="padding:3px 10px;font-size:12px;" onclick="setEntStatus(${e.id}, '${s}')">${s}</button>`).join('')}</div>`;
+      if (e.plot) html += `<div style="font-weight:600;margin:12px 0 6px;">剧情简介</div><div style="line-height:1.8;">${escapeHtml(e.plot)}</div>`;
+      if (e.quotes) html += `<div style="font-weight:600;margin:12px 0 6px;">台词记录</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.quotes)}</div>`;
+      if (e.review) html += `<div style="font-weight:600;margin:12px 0 6px;">观后感</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.review)}</div>`;
+      if (e.note) html += `<div style="font-weight:600;margin:12px 0 6px;">备注 / 攻略</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.note)}</div>`;
+      return html;
+    }
+
+    function showEnt(id) {
+      const e = (data.entertainment || []).find(x => x.id === id);
+      if (!e) return;
+      const back = document.getElementById('entDetailBack');
+      if (back) back.textContent = '← 返回' + entCurrentTab;
+      const p = document.getElementById('entDetailPanel'); if (p) p.style.display = '';
+      const g = document.getElementById('entGrid'); if (g) g.style.display = 'none';
+      const t = document.getElementById('entTabs'); if (t) t.style.display = 'none';
+      const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = 'none';
+      const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e);
+    }
+    function closeEntDetail() {
+      const p = document.getElementById('entDetailPanel'); if (p) p.style.display = 'none';
+      const g = document.getElementById('entGrid'); if (g) g.style.display = 'grid';
+      const t = document.getElementById('entTabs'); if (t) t.style.display = 'flex';
+      const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = '';
+    }
+    function setEntStatus(id, st) {
+      const e = (data.entertainment || []).find(x => x.id === id);
+      if (!e) return;
+      e.status = st;
+      fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'entertainment', id: id, fields: { status: st } }) })
+        .then(r => r.json()).then(() => { const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e); renderEntertainment(); })
+        .catch(() => { const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e); renderEntertainment(); });
+    }
+    function syncEntertainment() {
+      const btn = (typeof event !== 'undefined' && event && event.target) ? event.target : null;
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ 同步中…'; }
+      fetch('/api/sync-entertainment', { method: 'POST' })
+        .then(r => r.json()).then(j => {
+          if (j.ok) {
+            loadData().then(() => { renderEntertainment(); foodToast('✅ 同步完成：新增 ' + j.inserted + ' 部，共 ' + j.total + ' 部'); });
+          } else { foodToast('❌ 同步失败：' + (j.error || '')); }
+        })
+        .catch(() => foodToast('❌ 同步出错'))
+        .finally(() => { if (btn) { btn.disabled = false; btn.textContent = '🔄 同步 Obsidian'; } });
+    }
+    function openEntAdd() { const m = document.getElementById('entAddModal'); if (m) m.classList.add('open'); }
+    function closeEntAdd() { const m = document.getElementById('entAddModal'); if (m) m.classList.remove('open'); }
+    function addEnt() {
+      const titleEl = document.getElementById('entAddTitle');
+      const title = titleEl ? titleEl.value.trim() : '';
+      if (!title) { foodToast('请填写作品名'); return; }
+      const typeEl = document.getElementById('entAddType');
+      const statusEl = document.getElementById('entAddStatus');
+      const type = typeEl ? typeEl.value : '电视剧';
+      const status = statusEl ? statusEl.value : '';
+      fetch('/api/insert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'entertainment', fields: { type: type, title: title, status: status, rating: 0, tags: '[]', created_at: new Date().toISOString() } }) })
+        .then(r => r.json()).then(j => {
+          if (j.ok) { closeEntAdd(); const ti = document.getElementById('entAddTitle'); if (ti) ti.value = ''; loadData().then(() => { entCurrentTab = type; renderEntertainment(); }); }
+          else foodToast('❌ 添加失败：' + (j.error || ''));
+        })
+        .catch(() => foodToast('❌ 添加出错'));
+    }
+
     // ===== 餐桌规划 / 采购清单 / 我的冰箱（Phase 2/3/4）=====
     let currentMenu = [];
     const SHOP_CATS = ['肉禽蛋','蔬菜','豆制品','海鲜','主食','调料','其他'];
@@ -2764,6 +2929,7 @@
       safe('taskboard', renderTaskboard);
       safe('recipes', renderRecipeGrid); safe('priceItems', renderPriceItems); safe('projects', renderProjects); safe('resources', renderResources); safe('cookFeed', renderCookFeed); safe('mealLog', renderMealLog); safe('profile', renderProfile); safe('help', renderHelp); safe('wishlist', renderWishlist);
       safe('menu', renderMenu); safe('shop', renderShopping); safe('fridge', renderFridge);
+      safe('entertainment', renderEntertainment);
     }
 
     function renderTopStatus() {

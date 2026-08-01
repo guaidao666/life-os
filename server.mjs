@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -65,6 +65,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS reward_log (
     id INTEGER PRIMARY KEY, ts TEXT, source TEXT, text TEXT,
     dw REAL DEFAULT 0, dsw REAL DEFAULT 0, bw REAL DEFAULT 0, bsw REAL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS entertainment (
+    id INTEGER PRIMARY KEY, type TEXT, title TEXT, status TEXT, rating REAL DEFAULT 0,
+    tags TEXT DEFAULT '[]', url TEXT, note TEXT, plot TEXT, quotes TEXT, review TEXT,
+    cover TEXT, created_at TEXT
   );
 `);
 
@@ -160,6 +165,9 @@ function readData() {
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
 
+  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at FROM entertainment').all()
+    .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '' }));
+
   const rewardLog = db.prepare('SELECT id,ts,source,text,dw,dsw,bw,bsw FROM reward_log ORDER BY ts DESC, id DESC LIMIT 50').all()
     .map(r => ({ id: r.id, ts: r.ts || '', source: r.source || '', text: r.text || '', dw: r.dw || 0, dsw: r.dsw || 0, bw: r.bw || 0, bsw: r.bsw || 0 }));
 
@@ -196,6 +204,7 @@ function readData() {
     taskboard,
     diary,
     rewardLog,
+    entertainment,
     theme
   };
 }
@@ -519,7 +528,7 @@ const server = http.createServer(async (req, res) => {
     'todos','recipes','meals','exercises','finances','price_items',
     'books','book_notes','english_words','projects','resources',
     'help_docs','wishlist','taskboard','diary','reward_log',
-    'menus','shopping_items','pantry'
+    'menus','shopping_items','pantry','entertainment'
   ]);
   const getCols = (t) => db.prepare('PRAGMA table_info(' + t + ')').all().map(r => r.name);
   const normVal = (v) => {
@@ -653,6 +662,109 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, inserted }));
     } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
+  }
+
+  // ---- 从 Obsidian 娱乐目录增量同步到 entertainment 表 ----
+  function parseEntertainment() {
+    const entDir = path.join(VAULT, '娱乐');
+    const files = listMdRecursive(entDir).filter(f => {
+      const base = path.basename(f.name).toLowerCase();
+      if (base.includes('readme')) return false;        // 汇总清单排除
+      if (base === '音乐.md') return false;             // 根目录音乐汇总排除
+      const rel = f.path.replace(/\\/g, '/');
+      if (rel.includes('/娱乐/assets/')) return false;  // 图片资源目录
+      return true;
+    });
+    // 已存在集合（按 type||title 去重，已存在跳过，不覆盖本地改动）
+    const existing = new Set();
+    db.prepare('SELECT type,title FROM entertainment').all().forEach(r => existing.add((r.type || '') + '||' + (r.title || '')));
+    const insEnt = db.prepare('INSERT INTO entertainment (id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    const TYPE_MAP = { '电视剧': '电视剧', '电影': '电影', '动漫': '动漫', '漫画': '漫画', '书籍': '书籍', '游戏': '游戏', '音乐': '音乐' };
+    let inserted = 0;
+    for (const f of files) {
+      const text = readMdSafe(f.path);
+      if (!text.trim()) continue;
+      const { fm, body } = parseFrontmatter(text);
+        const dirName = path.basename(path.dirname(f.path));
+        const segs = f.path.replace(/\\/g, '/').split('/');
+        const entIdx = segs.lastIndexOf('娱乐');
+        const topType = (entIdx >= 0 && segs[entIdx + 1]) ? segs[entIdx + 1] : dirName;
+        const type = TYPE_MAP[topType] || topType;
+      const title = (fm.title || path.basename(f.name).replace(/\.md$/, '')).trim();
+      if (!title) continue;
+      const key = type + '||' + title;
+      if (existing.has(key)) continue;
+      // 状态
+      let status = '';
+      const stM = body.match(/状态[：:]\s*\**\s*([未看想追在看已看看完]+)\s*\*/);
+      if (stM) {
+        const s = stM[1].trim();
+        if (s === '已看' || s === '看完') status = '看完';
+        else if (s === '在看') status = '在看';
+        else if (s === '想看' || s === '想追') status = '想追';
+        else if (s === '未看') status = '未看';
+      }
+      // 豆瓣评分
+      let rating = 0;
+      const rtM = body.match(/豆瓣[：:]\s*\**\s*\[?([\d.]+)\]?/);
+      if (rtM) rating = parseFloat(rtM[1]) || 0;
+      // 标签（#分类/标签#）
+      const tagM = body.match(/标签[：:]\s*#([^#\n]+)#/);
+      let tags = [];
+      if (tagM) tags = tagM[1].split('/').map(t => t.trim()).filter(Boolean);
+      // 资源链接
+      const urlM = body.match(/资源[：:]\s*\[[^\]]*\]\(([^)]+)\)/);
+      const url = urlM ? urlM[1] : '';
+      // 封面（Obsidian ![[xxx.jpg]]）→ 复制到 uploads/ent，转成可访问 URL
+      let cover = '';
+      const coverM = body.match(/!\[\[([^\]]+\.(?:jpe?g|png|gif|webp))\]\]/i);
+      if (coverM) {
+        const fname = coverM[1];
+        const candidates = [path.join(VAULT, '娱乐/assets', fname), path.join(path.dirname(f.path), fname)];
+        const src = candidates.find(p => existsSync(p));
+        if (src) {
+          try {
+            const dir = path.join(__dirname, 'uploads/ent');
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+            const safe = fname.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const dst = path.join(dir, safe);
+            if (!existsSync(dst)) copyFileSync(src, dst);
+            cover = '/uploads/ent/' + safe;
+          } catch (e) { /* 封面复制失败不阻断 */ }
+        }
+      }
+      // 分段提取
+      const sectionOf = (name) => {
+        const m = body.match(new RegExp('##\\s*\\*?\\*?' + name + '\\*?\\*?\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)', 'i'));
+        return m ? m[1].trim().replace(/!\[\[.*?\]\]/g, '').slice(0, 2000) : '';
+      };
+      const plot = sectionOf('剧情简介');
+      const quotes = sectionOf('台词记录');
+      const review = sectionOf('观后感') || sectionOf('感想') || sectionOf('我的评价');
+      // 无剧情简介的（多为游戏攻略/wiki）：把正文摘要存 note
+      let note = '';
+      if (!plot) {
+        note = stripObsidian(body).replace(/^#.*$/gm, '').replace(/!\[\[.*?\]\]/g, '').trim().slice(0, 1500);
+      }
+      insEnt.run(Date.now() + inserted, type, title, status, rating, JSON.stringify(tags), url, note, plot, quotes, review, cover, new Date().toISOString());
+      inserted++;
+    }
+    return inserted;
+  }
+
+  // 娱乐中心：从 Obsidian 增量同步（按 type+title 去重，已存在跳过）
+  if (req.method === 'POST' && url === '/api/sync-entertainment') {
+    try {
+      const inserted = parseEntertainment();
+      const total = db.prepare('SELECT COUNT(*) AS c FROM entertainment').get().c;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, inserted, total }));
+    } catch (e) {
+      console.error('SYNC-ENT ERROR:', e && e.stack ? e.stack : e);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: String(e) }));
     }
