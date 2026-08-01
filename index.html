@@ -570,6 +570,55 @@
   .tb-del-btn:hover { color:#ff5a5f; }
   .tb-done-group .tb-group-title { color:var(--text-secondary); }
   .muted { color:#999; font-weight:400; font-size:13px; }
+
+  /* === LifeOS enhancements (Phase 1 + diary + wheel + fridge) === */
+  #topStatus { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .ts-pill { background:var(--surface-solid); border:1px solid var(--border); border-radius:20px; padding:4px 12px; font-size:13px; color:var(--text-secondary); white-space:nowrap; }
+  .ts-pill b { color:var(--text); font-weight:600; }
+  .ts-pill.accent { background:rgba(52,199,89,.14); border-color:transparent; color:var(--green); }
+
+  .mod-head { margin-bottom:18px; }
+  .mod-title { display:flex; align-items:center; gap:8px; font-size:22px; font-weight:700; }
+  .mod-icon { font-size:24px; }
+  .mod-sub { color:var(--text-secondary); font-size:14px; margin-top:2px; }
+  .mod-pills { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .pill { font-size:12px; padding:3px 10px; border-radius:20px; background:var(--surface-solid); border:1px solid var(--border); color:var(--text-secondary); }
+  .pill.ok { background:rgba(52,199,89,.14); color:var(--green); border-color:transparent; }
+  .pill.warn { background:rgba(255,149,0,.14); color:var(--orange); border-color:transparent; }
+  .pill.bad { background:rgba(255,55,95,.14); color:var(--pink); border-color:transparent; }
+  .pill.info { background:rgba(0,113,227,.12); color:var(--blue); border-color:transparent; }
+  .mod-stats { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
+  .mod-stats .stat-card { flex:1; min-width:120px; }
+
+  .diary-cal-head { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; font-size:12px; color:var(--text-secondary); text-align:center; margin-bottom:4px; }
+  .diary-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .diary-cell { aspect-ratio:1; border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:12px; cursor:pointer; position:relative; background:var(--surface-solid); border:1px solid var(--border); color:var(--text); transition:.15s; }
+  .diary-cell:hover { border-color:var(--purple); }
+  .diary-cell.muted { color:var(--text-tertiary); }
+  .diary-cell.today { box-shadow:0 0 0 2px var(--purple); }
+  .diary-cell.sel { background:rgba(175,82,222,.12); }
+  .diary-cell .dot { width:5px; height:5px; border-radius:50%; background:var(--green); position:absolute; bottom:4px; }
+
+  .dd-mood { font-size:22px; cursor:pointer; padding:2px 6px; border-radius:8px; }
+  .dd-mood.selected { background:rgba(175,82,222,.14); }
+
+  .food-wheel-wrap { max-width:460px; margin:0 auto; text-align:center; }
+  .food-wheel-stage { position:relative; height:80px; overflow:hidden; border-radius:16px; background:var(--surface-solid); box-shadow:inset 0 2px 8px rgba(0,0,0,.06); }
+  .food-wheel-stage::before, .food-wheel-stage::after { content:''; position:absolute; left:0; right:0; height:12px; z-index:2; pointer-events:none; }
+  .food-wheel-stage::before { top:0; background:linear-gradient(to bottom, var(--surface-solid), transparent); }
+  .food-wheel-stage::after { bottom:0; background:linear-gradient(to top, var(--surface-solid), transparent); }
+  .food-slot-strip { position:absolute; left:0; right:0; top:0; transition:transform 3s cubic-bezier(.2,.8,.2,1); }
+  .food-slot { height:80px; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; color:var(--text-secondary); }
+  .food-slot.hi { color:var(--purple); font-size:22px; }
+  .food-wheel-pointer { display:none; }
+
+  .fridge-cat-card { margin-bottom:14px; }
+  .fridge-cat-title { font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .pantry-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:14px; background:var(--surface-solid); border:1px solid var(--border); font-size:14px; margin:4px; }
+  .pantry-chip .x { cursor:pointer; color:var(--text-tertiary); margin-left:4px; font-size:13px; }
+  .pantry-chip .x:hover { color:var(--pink); }
+  .pantry-empty { text-align:center; padding:30px 10px; color:var(--text-secondary); }
+  .pantry-empty .big { font-size:40px; }
   </style>
 </head>
 <body>
@@ -624,6 +673,7 @@
         <div>
           <div class="greeting" id="greeting">你好，我</div>
           <div class="date-text" id="dateText"></div>
+          <div id="topStatus" style="margin-top:8px;"></div>
         </div>
         <div class="top-actions">
           <span id="connStatus" style="font-size:12px;color:var(--text-secondary);align-self:center;margin-right:4px;">💾 本地模式</span>
@@ -812,6 +862,12 @@
 
       <!-- 饮食中心（合并 饮食记录 + 烟火食记） -->
       <section class="section" id="sec-food">
+        <div class="mod-head">
+          <div class="mod-title"><span class="mod-icon">🍳</span>饮食中心</div>
+          <div class="mod-sub">吃好每一餐，做好每一道菜</div>
+          <div class="mod-pills" id="pills-food"></div>
+          <div class="mod-stats" id="stats-food"></div>
+        </div>
         <div class="food-tabs" id="foodTabs">
           <div class="food-tab active" onclick="switchFoodTab('today', this)">🍽️ 今日吃什么</div>
           <div class="food-tab" onclick="switchFoodTab('recipes', this)">📖 菜谱库</div>
@@ -823,6 +879,19 @@
 
         <!-- Tab 1: 今日吃什么 -->
         <div id="foodTabToday">
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">🎰 今天吃什么 · 美食转盘</div>
+            <div class="food-wheel-wrap">
+              <div class="food-wheel-stage">
+                <div class="food-wheel-pointer"></div>
+                <div class="food-slot-strip" id="foodSlotStrip"></div>
+              </div>
+              <div style="margin-top:18px;">
+                <button class="btn btn-orange" id="foodSpinBtn" onclick="spinFoodWheel()" style="width:100%;max-width:280px;padding:12px 24px;font-size:16px;">🎲 转一转</button>
+              </div>
+              <div id="foodSpinResult" style="margin-top:18px;"></div>
+            </div>
+          </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
             <button class="btn btn-green" onclick="openCookModal()">🍳 记录做菜</button>
             <button class="btn btn-orange" onclick="openMealModal()">🍎 记一餐</button>
@@ -855,11 +924,17 @@
         <!-- Tab 2: 菜谱库 -->
         <div id="foodTabRecipes" style="display:none;">
           <div class="card">
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+            <div id="recipeSearchBar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
               <input class="input" id="cookRecipeSearch" placeholder="🔍 搜索菜名…" oninput="renderRecipeGrid()" style="max-width:260px;">
               <select class="input" id="recipeCatFilter" onchange="renderRecipeGrid()" style="width:140px;"></select>
             </div>
             <div id="recipeGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;"></div>
+            <div id="recipeDetailPanel" style="display:none;">
+              <div style="margin-bottom:14px;">
+                <button class="btn" onclick="closeRecipeDetail()" id="recipeDetailBack">← 返回菜谱库</button>
+              </div>
+              <div id="recipeDetailBody"></div>
+            </div>
           </div>
         </div>
 
@@ -897,13 +972,14 @@
         <!-- Tab 5: 采购清单（Phase 3） -->
         <div id="foodTabShop" style="display:none;">
           <div class="card">
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
               <input class="input" id="shopName" placeholder="食材名称">
               <select class="input" id="shopCat" style="width:130px;">
                 <option>肉禽蛋</option><option>蔬菜</option><option>豆制品</option><option>海鲜</option><option>主食</option><option>调料</option><option>其他</option>
               </select>
               <input class="input" id="shopQty" placeholder="数量" style="width:90px;">
               <button class="btn btn-green" onclick="addShopItem()">➕ 加一项</button>
+              <button class="btn btn-red" style="margin-left:auto;" onclick="clearShopping()">🗑️ 一键清空</button>
             </div>
             <div id="shopList"></div>
           </div>
@@ -912,12 +988,13 @@
         <!-- Tab 6: 我的冰箱（Phase 4） -->
         <div id="foodTabFridge" style="display:none;">
           <div class="card">
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-              <input class="input" id="pantryName" placeholder="食材名称">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+              <input class="input" id="pantryName" placeholder="📝 食材名称">
               <select class="input" id="pantryCat" style="width:130px;">
                 <option>肉禽蛋</option><option>蔬菜</option><option>豆制品</option><option>海鲜</option><option>主食</option><option>调料</option><option>其他</option>
               </select>
-              <input class="input" id="pantryQty" placeholder="数量" style="width:90px;">
+              <input class="input" id="pantryQty" placeholder="🔢 数量" style="width:90px;">
+              <input class="input" id="pantryUnit" placeholder="📦 单位" style="width:80px;">
               <button class="btn btn-green" onclick="addPantryItem()">➕ 入库</button>
             </div>
             <div id="pantryList"></div>
@@ -951,6 +1028,12 @@
 
       <!-- 3. 运动打卡 -->
       <section class="section" id="sec-exercise">
+        <div class="mod-head">
+          <div class="mod-title"><span class="mod-icon">🏃</span>运动打卡</div>
+          <div class="mod-sub">每一次汗水，都是对身体的投资</div>
+          <div class="mod-pills" id="pills-exercise"></div>
+          <div class="mod-stats" id="stats-exercise"></div>
+        </div>
         <div class="grid-2">
           <div class="card">
             <div class="card-title">🏃 添加运动</div>
@@ -989,6 +1072,12 @@
 
       <!-- 4. 记账存钱 -->
       <section class="section" id="sec-finance">
+        <div class="mod-head">
+          <div class="mod-title"><span class="mod-icon">💰</span>记账存钱</div>
+          <div class="mod-sub">清楚每一笔钱去了哪里</div>
+          <div class="mod-pills" id="pills-finance"></div>
+          <div class="mod-stats" id="stats-finance"></div>
+        </div>
         <div class="grid-2">
           <div class="card">
             <div class="card-title">💳 记一笔</div>
@@ -1028,6 +1117,12 @@
 
       <!-- 5. 读书收获 -->
       <section class="section" id="sec-books">
+        <div class="mod-head">
+          <div class="mod-title"><span class="mod-icon">📚</span>读书收获</div>
+          <div class="mod-sub">读书是成本最低的进化</div>
+          <div class="mod-pills" id="pills-books"></div>
+          <div class="mod-stats" id="stats-books"></div>
+        </div>
         <div class="grid-2">
           <div class="card">
             <div class="card-title">📖 添加书籍</div>
@@ -1051,7 +1146,7 @@
 
       <!-- 日记 -->
       <section class="section" id="sec-diary">
-        <div class="grid-2">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:start;">
           <div class="card">
             <div class="card-title">📔 写日记</div>
             <div style="display:flex;gap:10px;">
@@ -1073,9 +1168,27 @@
             </div>
             <div id="diaryMsg" style="margin-top:10px;font-size:13px;min-height:18px;"></div>
           </div>
-          <div class="card">
-            <div class="card-title">📚 日记时间线</div>
-            <div id="diaryList" style="max-height:560px;overflow-y:auto;"></div>
+          <div class="card diary-side-cal">
+            <div class="card-title" style="margin-bottom:10px;">📅 日记日历</div>
+            <div class="diary-cal-nav">
+              <button class="btn ghost" style="padding:4px 10px;" onclick="diaryPrevMonth()">‹</button>
+              <span class="diary-cal-title" id="diaryCalTitle"></span>
+              <button class="btn ghost" style="padding:4px 10px;" onclick="diaryNextMonth()">›</button>
+              <button class="btn btn-blue" style="padding:4px 10px;margin-left:auto;" onclick="diaryGoToday()">今天</button>
+            </div>
+            <div class="diary-cal-head">
+              <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+            </div>
+            <div class="diary-cal" id="diaryCal"></div>
+            <div id="diaryCalStat" style="margin-top:10px;font-size:12px;color:var(--text-secondary);"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:18px;">
+          <div class="card-title">📚 日记时间线</div>
+          <div id="diaryList" style="max-height:720px;overflow-y:auto;"></div>
+          <div id="diaryDetailPanel" style="display:none;">
+            <div style="margin-bottom:14px;"><button class="btn" onclick="closeDiaryDetail()">← 返回日记</button></div>
+            <div id="diaryDetailBody"></div>
           </div>
         </div>
       </section>
@@ -1148,6 +1261,12 @@
 
       <!-- 9. 项目/目标 -->
       <section class="section" id="sec-projects">
+        <div class="mod-head">
+          <div class="mod-title"><span class="mod-icon">🎯</span>项目 / 目标</div>
+          <div class="mod-sub">推进每一件重要的事</div>
+          <div class="mod-pills" id="pills-projects"></div>
+          <div class="mod-stats" id="stats-projects"></div>
+        </div>
         <div class="grid-2">
           <div class="card" style="grid-column:1/-1;">
             <div class="card-title">🎯 项目 / 目标（来自 Obsidian 任务板 & 人生管理）</div>
@@ -1281,6 +1400,34 @@
   </div>
 
   <script>
+    // 首绘前恢复上次停留的页面，避免刷新闪总览
+    (function () {
+      try {
+        var sec = localStorage.getItem('lifeOS_section');
+        if (sec && document.getElementById('sec-' + sec)) {
+          document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+          document.getElementById('sec-' + sec).classList.add('active');
+          document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+          var nav = document.querySelector('.nav-item[data-section="' + sec + '"]');
+          if (nav) nav.classList.add('active');
+          var ft = localStorage.getItem('lifeOS_foodTab');
+          var tabs = ['today','recipes','menu','shop','fridge','log'];
+          if (ft && tabs.indexOf(ft) >= 0) {
+            document.querySelectorAll('.food-tab').forEach(function (t) { t.classList.remove('active'); });
+            var idx = tabs.indexOf(ft);
+            var ftEl = document.querySelectorAll('.food-tab')[idx];
+            if (ftEl) ftEl.classList.add('active');
+            tabs.forEach(function (k) {
+              var e = document.getElementById('foodTab' + k.charAt(0).toUpperCase() + k.slice(1));
+              if (e) e.style.display = (k === ft) ? '' : 'none';
+            });
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <script>
     // Data & state
     const defaultData = {
       todos: [],
@@ -1364,6 +1511,7 @@
       const nav = document.querySelector('.nav-item[data-section="' + id + '"]');
       if (nav) nav.classList.add('active');
       if (window.innerWidth <= 768) toggleSidebar(false);
+      try { localStorage.setItem('lifeOS_section', id); } catch (e) {}
       renderAll();
     }
     function toggleSidebar(force) {
@@ -1491,6 +1639,7 @@
         const e = document.getElementById('foodTab' + k.charAt(0).toUpperCase() + k.slice(1));
         if (e) e.style.display = (tab === k) ? '' : 'none';
       });
+      try { localStorage.setItem('lifeOS_foodTab', tab); } catch (e) {}
       if (tab === 'recipes') renderRecipeGrid();
       if (tab === 'log') renderMealLog();
       if (tab === 'menu') renderMenu();
@@ -1582,6 +1731,68 @@
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(128,128,128,0.1)' } }, x: { grid: { display: false } } } }
       });
       renderCookFeed();
+      buildFoodWheel();
+    }
+
+    // 美食转盘（滚动抽奖轮）
+    let foodSpun = [];
+    function foodPool() {
+      return (data.food.recipes || []).filter(r => Array.isArray(r.ingredients) && r.ingredients.length > 0);
+    }
+    function buildFoodWheel() {
+      const strip = document.getElementById('foodSlotStrip'); if (!strip) return;
+      const pool = foodPool();
+      const base = pool.length ? pool : (data.food.recipes || []);
+      if (!base.length) { strip.innerHTML = ''; strip.dataset.count = 0; return; }
+      const count = base.length;
+      const reps = 4;
+      const minLen = (reps + 2) * Math.max(count, 12);
+      let items = [];
+      while (items.length < minLen) { items = items.concat(base); }
+      items = items.slice(0, minLen);
+      strip.dataset.count = count;
+      strip.innerHTML = items.map((r, i) => '<div class="food-slot" data-i="' + i + '">' + escapeHtml(r.name) + '</div>').join('');
+    }
+    function spinFoodWheel() {
+      const strip = document.getElementById('foodSlotStrip'); if (!strip) return;
+      const pool = foodPool();
+      if (!pool.length) { showFoodResult(null); return; }
+      const remain = pool.filter(r => !foodSpun.includes(r.id));
+      const pickFrom = remain.length ? remain : pool;
+      const pick = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+      foodSpun.push(pick.id);
+      if (foodSpun.length >= pool.length) foodSpun = [];
+      const btn = document.getElementById('foodSpinBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '🎲 转动中…'; }
+      const count = parseInt(strip.dataset.count) || pool.length;
+      const reps = 4;
+      const slotHeight = 80;
+      const pickIndex = pool.findIndex(r => r.id === pick.id);
+      const stopIndex = pickIndex >= 0 ? pickIndex : Math.floor(Math.random() * count);
+      const target = (reps * count + stopIndex) * slotHeight;
+      strip.style.transition = 'none';
+      strip.style.transform = 'translateY(0)';
+      void strip.offsetHeight;
+      strip.style.transition = 'transform 3s cubic-bezier(.2,.8,.2,1)';
+      strip.style.transform = 'translateY(-' + target + 'px)';
+      setTimeout(() => { showFoodResult(pick); if (btn) { btn.disabled = false; btn.textContent = '🎲 转一转'; } }, 3100);
+    }
+    function showFoodResult(r) {
+      const el = document.getElementById('foodSpinResult'); if (!el) return;
+      if (!r) { el.innerHTML = '<div class="empty-state">菜谱库还没有可用菜谱</div>'; return; }
+      const diff = '★'.repeat(r.difficulty || 2) + '☆'.repeat(5 - (r.difficulty || 2));
+      const pct = matchPercent(r);
+      const badge = pct === null ? '' : '<span class="tag" style="background:var(--green);color:#fff;font-size:11px;margin-left:6px;">' + pct + '% 匹配</span>';
+      el.innerHTML = '<div style="padding:16px;border-radius:16px;background:var(--surface-solid);border:1px solid var(--border);">' +
+        '<div style="font-size:22px;font-weight:700;">🍽️ ' + escapeHtml(r.name) + '</div>' +
+        '<div style="color:var(--text-secondary);font-size:13px;margin-top:6px;">⏱ ' + (r.time || 0) + ' 分钟 · 难度 ' + diff + badge + '</div>' +
+        '<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px;">' +
+          '<button class="btn btn-orange" onclick="openRecipeFromToday(' + r.id + ')" style="width:100%;">📖 查看完整菜谱详情</button>' +
+          '<div style="display:flex;gap:10px;">' +
+            '<button class="btn" onclick="spinFoodWheel()" style="flex:1;">🔁 再转一次</button>' +
+            '<button class="btn btn-blue" onclick="foodSpun=[];spinFoodWheel()" style="flex:1;">♻️ 重置</button>' +
+          '</div>' +
+        '</div></div>';
     }
 
     // Exercise
@@ -1739,6 +1950,7 @@
         if (!r.ok) { showDiaryMsg('保存失败：' + (r.error || ''), true); return; }
         loadData().then(() => {
           renderDiary();
+          renderDiaryCalendar();
           showDiaryMsg(editingDiaryId ? '已更新 ✓' : '已保存 ✓');
           editingDiaryId = null;
           document.getElementById('diaryContent').value = '';
@@ -1753,19 +1965,119 @@
     function importDiary() {
       showDiaryMsg('导入中…');
       apiPost('/api/import-diary', {}).then(r => {
-        if (r.ok) { loadData().then(() => { renderDiary(); showDiaryMsg('已从 Obsidian 导入 ' + r.inserted + ' 篇 ✓'); }); }
+        if (r.ok) { loadData().then(() => { renderDiary(); renderDiaryCalendar(); showDiaryMsg('已从 Obsidian 导入 ' + r.inserted + ' 篇 ✓'); }); }
         else showDiaryMsg('导入失败：' + (r.error || ''), true);
       });
+    }
+    // 日记日历
+    let diaryCalYear = new Date().getFullYear();
+    let diaryCalMonth = new Date().getMonth();
+    let diarySelDate = todayStr();
+    const WEEK_H = ['日','一','二','三','四','五','六'];
+    function renderDiaryCalendar() {
+      const cal = document.getElementById('diaryCal'); if (!cal) return;
+      const titleEl = document.getElementById('diaryCalTitle');
+      const statEl = document.getElementById('diaryCalStat');
+      const byDate = {}; (data.diary || []).forEach(d => { if (d.date) byDate[d.date] = true; });
+      const first = new Date(diaryCalYear, diaryCalMonth, 1);
+      const startDay = first.getDay();
+      const daysInMonth = new Date(diaryCalYear, diaryCalMonth + 1, 0).getDate();
+      const today = todayStr();
+      const cells = [];
+      for (let i = 0; i < startDay; i++) cells.push('<div class="diary-cell muted"></div>');
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = diaryCalYear + '-' + String(diaryCalMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        const has = !!byDate[ds];
+        const cls = ['diary-cell'];
+        if (ds === today) cls.push('today');
+        if (ds === diarySelDate) cls.push('sel');
+        cells.push('<div class="' + cls.join(' ') + '" onclick="clickDiaryDate(\'' + ds + '\',' + has + ')">' + d + (has ? '<span class="dot"></span>' : '') + '</div>');
+      }
+      cal.innerHTML = cells.join('');
+      if (titleEl) titleEl.textContent = diaryCalYear + '年' + (diaryCalMonth + 1) + '月';
+      if (statEl) {
+        let cnt = 0;
+        for (let d = 1; d <= daysInMonth; d++) { const ds = diaryCalYear + '-' + String(diaryCalMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0'); if (byDate[ds]) cnt++; }
+        statEl.textContent = '本月已写 ' + cnt + ' / ' + daysInMonth + ' 天';
+      }
+    }
+    function diaryPrevMonth() { diaryCalMonth--; if (diaryCalMonth < 0) { diaryCalMonth = 11; diaryCalYear--; } renderDiaryCalendar(); }
+    function diaryNextMonth() { diaryCalMonth++; if (diaryCalMonth > 11) { diaryCalMonth = 0; diaryCalYear++; } renderDiaryCalendar(); }
+    function diaryGoToday() { const n = new Date(); diaryCalYear = n.getFullYear(); diaryCalMonth = n.getMonth(); diarySelDate = todayStr(); renderDiaryCalendar(); }
+    function clickDiaryDate(ds, has) {
+      diarySelDate = ds;
+      renderDiaryCalendar();
+      const d = (data.diary || []).find(x => x.date === ds);
+      if (has && d) openDiary(d.id);
+      else {
+        editingDiaryId = null;
+        document.getElementById('diaryDate').value = ds;
+        document.getElementById('diaryTitle').value = '';
+        document.getElementById('diaryContent').value = '';
+        selectedDiaryMood = '';
+        document.querySelectorAll('.diary-mood').forEach(m => m.classList.remove('selected'));
+        showDiaryMsg('已切到 ' + ds + '，写点什么保存即创建');
+        document.getElementById('diaryContent').focus();
+      }
     }
     function renderDiary() {
       const list = document.getElementById('diaryList');
       if (!list) return;
       const items = data.diary || [];
       list.innerHTML = items.length ? items.map(d => `
-        <div class="diary-item" onclick="editDiary(${d.id})">
+        <div class="diary-item" onclick="openDiary(${d.id})">
           <div class="diary-item-head"><span class="diary-date">${escapeHtml(d.date)}</span>${d.mood ? `<span class="diary-mood-mini">${d.mood}</span>` : ''}<span class="diary-title">${escapeHtml(d.title || '无标题')}</span></div>
           <div class="diary-snippet">${escapeHtml((d.content || '').slice(0, 90))}${(d.content || '').length > 90 ? '…' : ''}</div>
         </div>`).join('') : '<div class="empty-state" style="padding:20px;">还没有日记，写第一篇吧</div>';
+      renderDiaryCalendar();
+    }
+    let ddMood = '';
+    function openDiary(id) {
+      const d = (data.diary || []).find(x => x.id === id);
+      if (!d) return;
+      document.getElementById('diaryList').style.display = 'none';
+      document.getElementById('diaryDetailPanel').style.display = '';
+      ddMood = d.mood || '';
+      document.getElementById('diaryDetailBody').innerHTML = diaryDetailHtml(d);
+      document.querySelectorAll('.dd-mood').forEach(m => m.classList.toggle('selected', m.dataset.m === ddMood && !!ddMood));
+    }
+    function closeDiaryDetail() {
+      document.getElementById('diaryDetailPanel').style.display = 'none';
+      document.getElementById('diaryList').style.display = '';
+    }
+    function selectDdMood(el) {
+      document.querySelectorAll('.dd-mood').forEach(m => m.classList.remove('selected'));
+      el.classList.add('selected');
+      ddMood = el.dataset.m;
+    }
+    function diaryDetailHtml(d) {
+      const moods = ['', '😄', '🙂', '😐', '😕', '😢'];
+      return '<div style="display:flex;gap:10px;margin-bottom:12px;">' +
+        '<input class="input" id="ddDate" type="date" value="' + (d.date || '') + '" style="max-width:170px;">' +
+        '<input class="input" id="ddTitle" type="text" value="' + escapeHtml(d.title || '') + '" placeholder="标题（可选）" style="flex:1;">' +
+        '</div>' +
+        '<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+        '<span style="color:var(--text-secondary);font-size:13px;margin-right:4px;">心情</span>' +
+        moods.map(m => '<span class="dd-mood" data-m="' + m + '" onclick="selectDdMood(this)">' + (m || '😐') + '</span>').join('') +
+        '</div>' +
+        '<textarea class="input" id="ddContent" rows="14" style="margin-bottom:12px;">' + escapeHtml(d.content || '') + '</textarea>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+        '<button class="btn btn-green" onclick="saveDiaryDetail(' + d.id + ')">保存</button>' +
+        '<button class="btn btn-red" onclick="if(confirm(\'删除这篇日记？\'))delDiary(' + d.id + ')">删除</button>' +
+        '</div>';
+    }
+    function saveDiaryDetail(id) {
+      const fields = { date: document.getElementById('ddDate').value, title: document.getElementById('ddTitle').value.trim(), content: document.getElementById('ddContent').value, mood: ddMood };
+      apiPost('/api/update', { table: 'diary', id, fields }).then(r => {
+        if (!r.ok) { alert('保存失败：' + (r.error || '')); return; }
+        loadData().then(() => { renderDiary(); renderDiaryCalendar(); closeDiaryDetail(); showDiaryMsg('已保存 ✓'); });
+      });
+    }
+    function delDiary(id) {
+      apiPost('/api/delete', { table: 'diary', id }).then(r => {
+        if (!r.ok) { alert('删除失败：' + (r.error || '')); return; }
+        loadData().then(() => { renderDiary(); renderDiaryCalendar(); closeDiaryDetail(); showDiaryMsg('已删除'); });
+      });
     }
     function editDiary(id) {
       const d = (data.diary || []).find(x => x.id === id);
@@ -2016,7 +2328,7 @@
         const tags = (r.tags || []).map(t => '<span class="tag" style="font-size:11px;">' + escapeHtml(t) + '</span>').join(' ');
         const pct = matchPercent(r);
         const badge = pct === null ? '<span class="tag" style="font-size:11px;">未填食材</span>' : '<span class="tag" style="background:var(--green);color:#fff;font-size:11px;">' + pct + '% 匹配</span>';
-        return '<div class="book-card" onclick="showRecipe(' + r.id + ')" style="cursor:pointer;position:relative;">' +
+        return '<div class="book-card" onclick="showRecipe(' + r.id + ', \'recipes\')" style="cursor:pointer;position:relative;">' +
           '<div style="font-weight:700;font-size:15px;">' + escapeHtml(r.name) + '</div>' +
           '<div style="color:var(--text-secondary);font-size:13px;margin:4px 0;">' + escapeHtml(r.category || '') + (r.cost ? ' · ' + escapeHtml(r.cost) : '') + '</div>' +
           '<div style="font-size:12px;color:var(--text-secondary);">⏱ ' + (r.time || 0) + ' 分钟 · 难度 ' + diff + '</div>' +
@@ -2028,20 +2340,49 @@
         '</div>';
       }).join('');
     }
-    function showRecipe(id) {
+    let recipeDetailSource = '';
+    function recipeDetailHtml(r) {
+      const diff = '★'.repeat(r.difficulty || 2) + '☆'.repeat(5 - (r.difficulty || 2));
+      const tags = (r.tags || []).map(t => '<span class="tag" style="font-size:11px;">' + escapeHtml(t) + '</span>').join(' ');
+      const ings = (r.ingredients || []).map(i => {
+        const name = typeof i === 'string' ? i : (i.name || '');
+        const amount = typeof i === 'string' ? '' : (i.amount || '');
+        const unit = typeof i === 'string' ? '' : (i.unit || '');
+        return '<li>' + escapeHtml(name) + (amount ? (' ' + amount + unit) : '') + '</li>';
+      }).join('');
+      const pct = matchPercent(r);
+      const badge = pct === null ? '<span class="tag" style="font-size:11px;">未填食材</span>' : '<span class="tag" style="background:var(--green);color:#fff;font-size:11px;">' + pct + '% 匹配</span>';
+      const steps = (r.steps || '（暂无做法）').split('\n').filter(s => s.trim()).map(s => '<li>' + escapeHtml(s.trim()) + '</li>').join('');
+      return '<div style="font-size:20px;font-weight:700;margin-bottom:6px;">🍳 ' + escapeHtml(r.name) + (r.cost ? ('（约 ' + escapeHtml(r.cost) + '）') : '') + '</div>' +
+        '<div style="color:var(--text-secondary);font-size:14px;margin-bottom:8px;">' + escapeHtml(r.category || '') + ' · ⏱ ' + (r.time || 0) + ' 分钟 · 难度 ' + diff + ' · ' + badge + '</div>' +
+        (tags ? '<div style="margin-bottom:10px;">' + tags + '</div>' : '') +
+        '<div style="font-weight:600;margin:10px 0 6px;">食材</div>' +
+        (ings ? '<ul style="margin:0;padding-left:20px;line-height:1.8;">' + ings + '</ul>' : '<div style="color:var(--text-secondary);">暂无食材</div>') +
+        '<div style="font-weight:600;margin:14px 0 6px;">做法</div>' +
+        (steps ? '<ol style="margin:0;padding-left:20px;line-height:1.8;">' + steps + '</ol>' : '<div style="color:var(--text-secondary);">（暂无做法）</div>') +
+        '<div style="margin-top:16px;"><button class="btn btn-orange" onclick="addToMenu(' + r.id + ')">+ 加入餐桌</button></div>';
+    }
+    function showRecipe(id, source) {
       const r = (data.food.recipes || []).find(x => x.id === id);
       if (!r) return;
-      const ings = (r.ingredients || []).map(i => {
-        if (typeof i === 'string') return '<li>' + escapeHtml(i) + '</li>';
-        return '<li>' + escapeHtml(i.name + (i.amount ? ' ' + i.amount : '')) + '</li>';
-      }).join('');
-      const tags = (r.tags || []).map(t => escapeHtml(t)).join('、');
-      let body = '🍳 ' + r.name + (r.cost ? ('（约 ' + r.cost + '）') : '') + '\n';
-      body += '⏱ ' + (r.time || 0) + ' 分钟 · 难度 ' + '★'.repeat(r.difficulty || 2) + '\n';
-      if (tags) body += '标签：' + tags + '\n';
-      if (ings) body += '食材：\n' + ings + '\n';
-      body += '做法：\n' + (r.steps || '（暂无做法）');
-      alert(body);
+      recipeDetailSource = source || 'recipes';
+      const back = document.getElementById('recipeDetailBack');
+      if (back) back.textContent = recipeDetailSource === 'today' ? '← 返回抽奖' : '← 返回菜谱库';
+      document.getElementById('recipeDetailPanel').style.display = '';
+      document.getElementById('recipeGrid').style.display = 'none';
+      document.getElementById('recipeSearchBar').style.display = 'none';
+      document.getElementById('recipeDetailBody').innerHTML = recipeDetailHtml(r);
+    }
+    function closeRecipeDetail() {
+      document.getElementById('recipeDetailPanel').style.display = 'none';
+      document.getElementById('recipeGrid').style.display = 'grid';
+      document.getElementById('recipeSearchBar').style.display = '';
+      if (recipeDetailSource === 'today') switchFoodTab('today', document.querySelector('.food-tab[onclick*="today"]'));
+    }
+    function openRecipeFromToday(id) {
+      const tabEl = document.querySelector('.food-tab[onclick*="recipes"]');
+      switchFoodTab('recipes', tabEl);
+      showRecipe(id, 'today');
     }
 
     // ===== 餐桌规划 / 采购清单 / 我的冰箱（Phase 2/3/4）=====
@@ -2132,26 +2473,60 @@
       renderMenu(); switchFoodTab('menu', document.querySelector('.food-tab[onclick*="menu"]'));
     }
     function delMenu(id) { if (!confirm('删除该餐桌？')) return; data.food.menus = (data.food.menus || []).filter(x => x.id !== id); saveData(); renderSavedMenus(); }
+    function parseQtyNum(s) { const m = String(s || '').trim().match(/^(\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null; }
+    const FRIDGE_CAT_EMOJI = { '肉禽蛋':'🥩','蔬菜':'🥬','豆制品':'🧈','海鲜':'🦐','主食':'🍚','调料':'🧂','其他':'📦' };
     function genShoppingFromMenu() {
       if (!currentMenu.length) { foodToast('先选好菜'); return; }
-      const pantryNames = new Set((data.food.pantry || []).map(p => p.name));
-      const items = [];
+      const stockByName = {};
+      (data.food.pantry || []).forEach(p => {
+        const n = parseQtyNum(p.qty);
+        const u = (p.unit || '').trim();
+        if (!stockByName[p.name]) stockByName[p.name] = { num: n, unit: u };
+        else if (stockByName[p.name].num === null && n !== null) { stockByName[p.name].num = n; if (u) stockByName[p.name].unit = u; }
+        else if (n !== null && stockByName[p.name].num !== null) stockByName[p.name].num += n;
+      });
+      const merged = {};
+      const pushItem = (name, cat, qty, unit) => {
+        if (merged[name]) {
+          const a = parseQtyNum(merged[name].qty), b = parseQtyNum(qty);
+          if (a !== null && b !== null) merged[name].qty = String(+(a + b).toFixed(2)); else merged[name].qty = qty;
+          return;
+        }
+        merged[name] = { id: Date.now() + Math.floor(Math.random() * 1000), menuId: null, name, category: SHOP_CATS.includes(cat) ? cat : '其他', qty, unit, checked: false, note: '' };
+      };
       currentMenu.forEach(m => {
         const r = (data.food.recipes || []).find(x => x.id === m.recipeId); if (!r) return;
         (r.ingredients || []).forEach(ing => {
           const name = typeof ing === 'string' ? ing : (ing.name || '');
           const cat = typeof ing === 'object' ? (ing.category || '其他') : '其他';
-          const qty = typeof ing === 'object' ? (ing.amount || '') : '';
+          const amount = typeof ing === 'object' ? (ing.amount || '') : '';
           const unit = typeof ing === 'object' ? (ing.unit || '') : '';
           if (!name) return;
-          if (pantryNames.has(name)) return;
-          if (items.some(it => it.name === name)) return;
-          items.push({ id: Date.now() + Math.floor(Math.random() * 1000), menuId: null, name, category: SHOP_CATS.includes(cat) ? cat : '其他', qty, unit, checked: false, note: '' });
+          const need = parseQtyNum(amount);
+          const stock = stockByName[name];
+          let qty = null;
+          if (need !== null) {
+            if (stock && stock.num !== null) { const left = need - stock.num; if (left <= 0) return; qty = String(+(left).toFixed(2)); }
+            else if (stock) return;
+            else qty = String(need);
+          } else {
+            if (stock) return;
+            qty = amount;
+          }
+          pushItem(name, cat, qty, unit);
         });
       });
-      if (!data.food.shopping) data.food.shopping = [];
-      data.food.shopping = data.food.shopping.concat(items);
-      saveData(); foodToast('已生成 ' + items.length + ' 项采购'); renderShopping(); switchFoodTab('shop', document.querySelector('.food-tab[onclick*="shop"]'));
+      const existing = data.food.shopping || [];
+      const result = existing.slice();
+      Object.values(merged).forEach(it => {
+        const found = result.find(x => x.name === it.name);
+        if (found) {
+          const a = parseQtyNum(found.qty), b = parseQtyNum(it.qty);
+          if (a !== null && b !== null) { found.qty = String(+(a + b).toFixed(2)); found.unit = it.unit || found.unit; } else found.qty = it.qty;
+        } else result.push(it);
+      });
+      data.food.shopping = result;
+      saveData(); foodToast('已生成 ' + Object.keys(merged).length + ' 项采购'); renderShopping(); switchFoodTab('shop', document.querySelector('.food-tab[onclick*="shop"]'));
     }
     function showStepOverview() {
       if (!currentMenu.length) { foodToast('先选好菜'); return; }
@@ -2174,11 +2549,12 @@
       SHOP_CATS.concat(['其他']).forEach(cat => {
         const arr = byCat[cat]; if (!arr || !arr.length) return;
         const done = arr.filter(it => it.checked).length;
-        html += '<div style="margin:14px 0 6px;font-weight:700;font-size:14px;">' + cat + ' <span style="color:var(--text-secondary);font-size:12px;">(' + done + '/' + arr.length + ')</span></div>';
-        html += arr.map(it => '<div class="record-item"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" ' + (it.checked ? 'checked' : '') + ' onchange="toggleShop(' + it.id + ')"> <span style="' + (it.checked ? 'text-decoration:line-through;color:var(--text-secondary);' : '') + '">' + escapeHtml(it.name) + (it.qty ? (' ' + it.qty + it.unit) : '') + '</span></label><span><button class="btn btn-red" style="padding:2px 8px;font-size:12px;" onclick="delShopItem(' + it.id + ')">删</button></span></div>').join('');
+        html += '<div style="margin:14px 0 6px;font-weight:700;font-size:14px;">' + (FRIDGE_CAT_EMOJI[cat] || '📦') + ' ' + cat + ' <span style="color:var(--text-secondary);font-size:12px;">(' + done + '/' + arr.length + ')</span></div>';
+        html += arr.map(it => '<div class="record-item"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" ' + (it.checked ? 'checked' : '') + ' onchange="toggleShop(' + it.id + ')"> <span style="' + (it.checked ? 'text-decoration:line-through;color:var(--text-secondary);' : '') + '">' + escapeHtml(it.name) + (it.qty ? (' ' + it.qty + (it.unit || '')) : '') + '</span></label><span><button class="btn btn-red" style="padding:2px 8px;font-size:12px;" onclick="delShopItem(' + it.id + ')">删</button></span></div>').join('');
       });
       el.innerHTML = html;
     }
+    function clearShopping() { if (!confirm('确定清空全部采购项？')) return; data.food.shopping = []; saveData(); renderShopping(); }
     function addShopItem() {
       const name = document.getElementById('shopName').value.trim(); if (!name) { foodToast('填名称'); return; }
       const cat = document.getElementById('shopCat').value; const qty = document.getElementById('shopQty').value.trim();
@@ -2193,14 +2569,15 @@
     function renderFridge() {
       const el = document.getElementById('pantryList'); if (!el) return;
       const ps = data.food.pantry || [];
-      if (!ps.length) el.innerHTML = '<div class="empty-state">冰箱还是空的，先入库些食材吧</div>';
+      if (!ps.length) el.innerHTML = '<div class="pantry-empty"><div class="big">🧊</div>冰箱还是空的，先入库些食材吧</div>';
       else {
         const byCat = {}; ps.forEach(p => { (byCat[p.category || '其他'] = byCat[p.category || '其他'] || []).push(p); });
         let html = '';
         SHOP_CATS.concat(['其他']).forEach(cat => {
           const arr = byCat[cat]; if (!arr || !arr.length) return;
-          html += '<div style="margin:12px 0 6px;font-weight:700;font-size:14px;">' + cat + '</div>';
-          html += arr.map(p => '<div class="record-item"><span>' + escapeHtml(p.name) + (p.qty ? (' ' + p.qty + p.unit) : '') + '</span><span><button class="btn btn-red" style="padding:2px 8px;font-size:12px;" onclick="delPantry(' + p.id + ')">删</button></span></div>').join('');
+          html += '<div class="fridge-cat-card"><div class="fridge-cat-title">' + (FRIDGE_CAT_EMOJI[cat] || '📦') + ' ' + cat + ' <span style="color:var(--text-tertiary);">(' + arr.length + ')</span></div>';
+          html += arr.map(p => '<span class="pantry-chip">' + escapeHtml(p.name) + (p.qty ? (' ' + escapeHtml(p.qty) + (p.unit || '')) : '') + '<span class="x" onclick="delPantry(' + p.id + ')">×</span></span>').join('');
+          html += '</div>';
         });
         el.innerHTML = html;
       }
@@ -2208,10 +2585,10 @@
     }
     function addPantryItem() {
       const name = document.getElementById('pantryName').value.trim(); if (!name) { foodToast('填名称'); return; }
-      const cat = document.getElementById('pantryCat').value; const qty = document.getElementById('pantryQty').value.trim();
+      const cat = document.getElementById('pantryCat').value; const qty = document.getElementById('pantryQty').value.trim(); const unit = document.getElementById('pantryUnit').value.trim();
       if (!data.food.pantry) data.food.pantry = [];
-      data.food.pantry.push({ id: Date.now(), name, category: cat, qty, unit: '', note: '' });
-      document.getElementById('pantryName').value = ''; document.getElementById('pantryQty').value = '';
+      data.food.pantry.push({ id: Date.now(), name, category: cat, qty, unit, note: '' });
+      document.getElementById('pantryName').value = ''; document.getElementById('pantryQty').value = ''; document.getElementById('pantryUnit').value = '';
       saveData(); renderFridge();
     }
     function delPantry(id) { data.food.pantry = (data.food.pantry || []).filter(x => x.id !== id); saveData(); renderFridge(); }
@@ -2381,11 +2758,80 @@
     function deleteCookPost(id) { deleteMeal(id); }
     function renderAll() {
       const safe = (label, fn) => { try { fn(); } catch (e) { console.error('[render fail] ' + label + ':', e); } };
+      safe('topStatus', renderTopStatus); safe('modHeads', renderModuleHeads);
       safe('overview', renderOverview);
       safe('todos', renderTodos); safe('food', renderFood); safe('exercise', renderExercise); safe('finance', renderFinance); safe('books', renderBooks); safe('diary', renderDiary); safe('english', renderEnglish);
       safe('taskboard', renderTaskboard);
       safe('recipes', renderRecipeGrid); safe('priceItems', renderPriceItems); safe('projects', renderProjects); safe('resources', renderResources); safe('cookFeed', renderCookFeed); safe('mealLog', renderMealLog); safe('profile', renderProfile); safe('help', renderHelp); safe('wishlist', renderWishlist);
       safe('menu', renderMenu); safe('shop', renderShopping); safe('fridge', renderFridge);
+    }
+
+    function renderTopStatus() {
+      const el = document.getElementById('topStatus'); if (!el) return;
+      const p = (data && data.player) || {};
+      const mood = (data && data.player && data.player.mood) ? data.player.mood : '—';
+      el.innerHTML =
+        '<span class="ts-pill accent">⚡ 愿力 <b>' + (Number(p.willpower) || 0) + '</b></span>' +
+        '<span class="ts-pill">⭐ 星愿 <b>' + (Number(p.starwish) || 0) + '</b></span>' +
+        '<span class="ts-pill">📜 契约 <b>' + (Number(p.contract) || 0) + '</b></span>' +
+        '<span class="ts-pill">🏅 Lv <b>' + (Number(p.level) || 1) + '</b></span>' +
+        '<span class="ts-pill">😊 心情 <b>' + mood + '</b></span>';
+    }
+
+    function pill(cls, text) { return '<span class="pill ' + cls + '">' + text + '</span>'; }
+    function weekStartUTC() { const d = new Date(); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); d.setUTCHours(0,0,0,0); return d; }
+    function streakFrom(set, today) {
+      let s = 0; const d = new Date(today + 'T00:00:00');
+      while (set.has(dateKey(d))) { s++; d.setDate(d.getDate() - 1); }
+      return s;
+    }
+    function renderModuleHeads() {
+      const food = data.food || {};
+      const recipes = food.recipes || [];
+      const pantry = food.pantry || [];
+      const diary = data.diary || [];
+      const exLogs = data.exercise.logs || [];
+      const finRec = data.finance.records || [];
+      const books = data.books || [];
+      const projects = data.projects || [];
+      const today = todayStr();
+      const weekStart = weekStartUTC();
+      const exSet = new Set(exLogs.filter(l => l.date).map(l => l.date));
+      const exThisWeek = exLogs.filter(l => new Date(l.date + 'T00:00:00') >= weekStart).length;
+      const finMonth = finRec.filter(r => r.date && r.date.slice(0,7) === today.slice(0,7));
+      const expense = finMonth.filter(r => r.type === 'expense').reduce((s,r)=>s+r.amount,0);
+      const income = finMonth.filter(r => r.type === 'income').reduce((s,r)=>s+r.amount,0);
+      const reading = books.filter(b => b.read > 0 && b.pages && b.read < b.pages).length;
+      const readDone = books.filter(b => b.pages && b.read >= b.pages).length;
+      const wantRead = books.filter(b => !b.pages || b.read === 0).length;
+      const tasks = projects.filter(p => p.type === 'task').length;
+      const goals = projects.filter(p => p.type !== 'task').length;
+      const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+      set('pills-food', pill('ok','今日餐 ' + (food.meals||[]).filter(m=>m.date===today).length) + pill('info','菜谱 ' + recipes.length + ' 道') + pill(pantry.length?'ok':'warn','冰箱 ' + pantry.length + ' 样'));
+      set('stats-food',
+        '<div class="stat-card"><div class="stat-number">' + recipes.length + '</div><div class="stat-label">菜谱总数</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + pantry.length + '</div><div class="stat-label">冰箱食材</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + (food.shopping||[]).length + '</div><div class="stat-label">采购项</div></div>');
+      set('pills-exercise', pill('ok','本周 ' + exThisWeek + ' 次') + pill(streakFrom(exSet, today)?'ok':'warn','连续 ' + streakFrom(exSet, today) + ' 天'));
+      set('stats-exercise',
+        '<div class="stat-card"><div class="stat-number">' + exThisWeek + '</div><div class="stat-label">本周次数</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + streakFrom(exSet, today) + '</div><div class="stat-label">连续天数</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + exLogs.filter(l=>l.date===today).reduce((s,l)=>s+(l.min||0),0) + '</div><div class="stat-label">今日分钟</div></div>');
+      set('pills-finance', pill('ok','本月收支清晰') + pill(expense?'warn':'ok','支出 ¥' + expense.toFixed(0)) + pill('info','物价 ' + (data.finance.priceItems||[]).length + ' 样'));
+      set('stats-finance',
+        '<div class="stat-card"><div class="stat-number amount-income">¥' + income.toFixed(0) + '</div><div class="stat-label">本月收入</div></div>' +
+        '<div class="stat-card"><div class="stat-number amount-expense">¥' + expense.toFixed(0) + '</div><div class="stat-label">本月支出</div></div>' +
+        '<div class="stat-card"><div class="stat-number">¥' + (income-expense).toFixed(0) + '</div><div class="stat-label">结余</div></div>');
+      set('pills-books', pill('info','在读 ' + reading) + pill('ok','已读 ' + readDone) + pill('warn','想读 ' + wantRead));
+      set('stats-books',
+        '<div class="stat-card"><div class="stat-number">' + books.length + '</div><div class="stat-label">藏书</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + reading + '</div><div class="stat-label">在读</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + wantRead + '</div><div class="stat-label">想读</div></div>');
+      set('pills-projects', pill('info','项目/任务 ' + tasks) + pill('ok','目标 ' + goals));
+      set('stats-projects',
+        '<div class="stat-card"><div class="stat-number">' + projects.length + '</div><div class="stat-label">总数</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + tasks + '</div><div class="stat-label">任务</div></div>' +
+        '<div class="stat-card"><div class="stat-number">' + goals + '</div><div class="stat-label">目标</div></div>');
     }
 
     function renderProfile() {
