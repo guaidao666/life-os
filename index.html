@@ -471,13 +471,17 @@
     .ent-doc-toc .toc-h { font-weight:600; color:var(--text); margin-bottom:6px; }
     .ent-doc-toc a { display:block; margin:4px 0; color:var(--text-secondary); text-decoration:none; cursor:pointer; }
     .ent-doc-toc a:hover { color:var(--purple); }
+    .ent-doc-toc .toc-l1 { font-weight:600; color:var(--text); }
+    .ent-doc-toc .toc-l2 { padding-left:10px; }
+    .ent-doc-toc .toc-l3 { padding-left:20px; font-size:11px; }
     .ent-doc-card { flex:1; min-width:0; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:22px 26px; }
     .ent-doc-card h1 { font-size:22px; font-weight:600; margin:0 0 12px; padding-left:12px; border-left:4px solid var(--purple); }
     .ent-doc-card h2 { font-size:17px; font-weight:600; margin:18px 0 8px; padding-bottom:6px; border-bottom:1px solid var(--border); }
     .ent-doc-card h3 { font-size:15px; font-weight:600; margin:14px 0 6px; }
     .ent-doc-card p { line-height:1.75; color:var(--text); margin:8px 0; }
-    .ent-doc-card ul { line-height:1.9; padding-left:20px; margin:6px 0 10px; }
+    .ent-doc-card ul, .ent-doc-card ol { line-height:1.9; padding-left:22px; margin:6px 0 10px; }
     .ent-doc-card li { margin:2px 0; }
+    .ent-doc-card ol { list-style-type: decimal; }
     .ent-doc-card a { color:var(--purple); }
     .ent-callout { display:flex; gap:10px; background:rgba(175,82,222,.07); border-left:4px solid var(--purple); border-radius:8px; padding:10px 14px; margin:12px 0; }
     .ent-callout .ic { font-size:16px; line-height:1.5; font-weight:600; color:var(--purple); }
@@ -2668,20 +2672,41 @@
         }).catch(() => foodToast('❌ 创建出错'));
     }
 
+    // 剥离 Markdown  frontmatter
+    function stripFrontmatter(md) {
+      return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+    }
+
     // Obsidian 笔记视图：渲染 README 原始 Markdown（轻量渲染器 + 美化外壳）
     function renderEntDoc() {
       const box = document.getElementById('entDocView');
       if (!box) return;
       box.style.display = 'block';
-      const md = (data.entReadmeDoc && data.entReadmeDoc[entCurrentTab]) || '';
+      let md = (data.entReadmeDoc && data.entReadmeDoc[entCurrentTab]) || '';
+      md = stripFrontmatter(md);
       if (!md.trim()) {
         box.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div>这个分类的 Obsidian 里还没有 README 笔记，点「🔄 同步 Obsidian」试试。</div>';
         return;
       }
-      // 桌面端目录：提取 H2
+      // 桌面端目录：提取 H1/H2/H3，跳过与分类名重复的首个 H1
       const toc = [];
-      md.split(/\r?\n/).forEach(l => { const m = l.match(/^##\s+(.+)$/); if (m) toc.push(m[1].trim()); });
-      const tocHtml = toc.length ? `<div class="ent-doc-toc"><div class="toc-h">目录</div>${toc.map((t, idx) => `<a onclick="document.getElementById('ent-h2-${idx}').scrollIntoView({behavior:'smooth',block:'start'})">${escapeHtml(t)}</a>`).join('')}</div>` : '';
+      let firstH1 = true;
+      md.split(/\r?\n/).forEach(l => {
+        const m = l.match(/^(#{1,3})\s+(.+?)\s*$/);
+        if (!m) return;
+        let t = m[2].replace(/\*\*/g, '').replace(/\*/g, '').trim();
+        if (m[1].length === 1 && firstH1 && t === entCurrentTab) { firstH1 = false; return; }
+        firstH1 = false;
+        toc.push({ level: m[1].length, title: t });
+      });
+      // 统计各级标题数量，用于生成锚点
+      const counts = { 1: 0, 2: 0, 3: 0 };
+      const tocHtml = toc.length
+        ? `<div class="ent-doc-toc"><div class="toc-h">目录</div>${toc.map(t => {
+            const idx = counts[t.level]++;
+            return `<a class="toc-l${t.level}" onclick="document.getElementById('ent-h${t.level}-${idx}').scrollIntoView({behavior:'smooth',block:'start'})">${escapeHtml(t.title)}</a>`;
+          }).join('')}</div>`
+        : '';
       const header = `<div class="ent-doc-header">
         <div class="title">Obsidian 笔记</div>
         <div class="crumb">娱乐中心 / ${escapeHtml(entCurrentTab)}</div>
@@ -2692,6 +2717,7 @@
     }
 
     function mdToHtml(md) {
+      md = stripFrontmatter(md);
       const footnotes = {};
       md = md.replace(/^\[\^([\w-]+)\]:\s*(.+)$/gm, (m, id, txt) => { footnotes[id] = txt.trim(); return ''; });
       const inline = (s) => {
@@ -2705,19 +2731,21 @@
         return s;
       };
       const lines = md.split(/\r?\n/);
-      let html = '', i = 0, hIdx = 0, h2Idx = 0;
-      const isList = (l) => /^\s*[-*]\s+/.test(l);
+      let html = '', i = 0;
+      const hCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+      const isUl = (l) => /^\s*[-*]\s+/.test(l);
+      const isOl = (l) => /^\s*\d+\.\s+/.test(l);
       const imgM = (l) => l.match(/^!\s*\[\[([^\]]+)\]\]$/);
       while (i < lines.length) {
         const line = lines[i];
         if (!line.trim()) { i++; continue; }
         const img = imgM(line);
         if (img) { html += `<div class="ent-img-ph">附件图片：${escapeHtml(img[1])}</div>`; i++; continue; }
-        const h = line.match(/^(#{1,4})\s+(.+)$/);
+        const h = line.match(/^(#{1,4})\s+(.+?)$/);
         if (h) {
           const lv = h[1].length;
-          const hid = (lv === 2) ? 'ent-h2-' + (h2Idx++) : 'ent-h-' + (hIdx++);
-          html += `<h${lv} id="${hid}">${inline(h[2])}</h${lv}>`; i++; continue;
+          const idx = hCounts[lv]++;
+          html += `<h${lv} id="ent-h${lv}-${idx}">${inline(h[2])}</h${lv}>`; i++; continue;
         }
         if (/^>\s?/.test(line)) {
           const buf = [];
@@ -2725,14 +2753,20 @@
           html += `<blockquote class="ent-callout"><div class="ic">i</div><div class="tx">${inline(buf.join(' '))}</div></blockquote>`;
           continue;
         }
-        if (isList(line)) {
+        if (isUl(line)) {
           const buf = [];
-          while (i < lines.length && isList(lines[i])) { buf.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; }
+          while (i < lines.length && isUl(lines[i])) { buf.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; }
           html += '<ul>' + buf.map(it => `<li>${inline(it)}</li>`).join('') + '</ul>';
           continue;
         }
+        if (isOl(line)) {
+          const buf = [];
+          while (i < lines.length && isOl(lines[i])) { buf.push(lines[i].replace(/^\s*\d+\.\s+/, '')); i++; }
+          html += '<ol>' + buf.map(it => `<li>${inline(it)}</li>`).join('') + '</ol>';
+          continue;
+        }
         const buf = [line]; i++;
-        while (i < lines.length && lines[i].trim() && !/^(#{1,4})\s/.test(lines[i]) && !isList(lines[i]) && !/^>\s?/.test(lines[i]) && !imgM(lines[i])) { buf.push(lines[i]); i++; }
+        while (i < lines.length && lines[i].trim() && !/^(#{1,4})\s/.test(lines[i]) && !isUl(lines[i]) && !isOl(lines[i]) && !/^>\s?/.test(lines[i]) && !imgM(lines[i])) { buf.push(lines[i]); i++; }
         html += `<p>${inline(buf.join(' '))}</p>`;
       }
       const fnIds = Object.keys(footnotes);

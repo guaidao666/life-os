@@ -794,9 +794,12 @@ const server = http.createServer(async (req, res) => {
       const insDoc = db.prepare('INSERT OR REPLACE INTO ent_readme_doc (type,content) VALUES (?,?)');
       let idc = 0;
     for (const type of types) {
-      const rd = path.join(entDir, type, 'README.md');
+      let rd = path.join(entDir, type, 'README.md');
+      if (!existsSync(rd)) rd = path.join(entDir, type + '.md');
       if (!existsSync(rd)) continue;
-      const text = readMdSafe(rd);
+      let text = readMdSafe(rd);
+      // 剥离 frontmatter
+      text = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
       insDoc.run(type, text);
       const titles = db.prepare('SELECT id,title FROM entertainment WHERE type=?').all(type);
       const titleMap = {};
@@ -805,7 +808,7 @@ const server = http.createServer(async (req, res) => {
       for (const lineRaw of text.split(/\r?\n/)) {
         const h = lineRaw.match(/^#{1,4}\s+(.+?)\s*$/);
         if (h) { curSection = h[1].replace(/\*\*/g, '').trim(); continue; }
-        const li = lineRaw.match(/^\s*[-*]\s+(.+?)\s*$/);
+        const li = lineRaw.match(/^\s*(?:[-*]|\d+\.)\s+(.+?)\s*$/);
         if (!li) continue;
         let raw = li[1].trim();
         // 跳过纯脚注引用
