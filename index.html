@@ -91,6 +91,29 @@
       font-size: 11px; font-weight: 600; letter-spacing: .08em;
       color: var(--text-tertiary); padding: 14px 14px 4px;
     }
+    .nav-folder {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; margin: 4px 0; border-radius: 12px;
+      cursor: pointer; color: var(--text-secondary); transition: all .2s; font-size: 15px;
+    }
+    .nav-folder:hover { background: var(--bg); color: var(--text); }
+    .nav-folder.active { background: rgba(175,82,222,.12); color: var(--purple); font-weight: 600; }
+    .nav-folder .nav-icon { width: 22px; text-align: center; font-size: 18px; }
+    .ent-chevron { transition: transform .2s; font-size: 12px; opacity: .6; }
+    .ent-chevron.open { transform: rotate(90deg); }
+    .nav-sub {
+      display: flex; flex-direction: column; gap: 2px;
+      margin: 0 0 4px 22px; padding-left: 12px;
+      border-left: 2px solid var(--border);
+    }
+    .nav-sub-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; border-radius: 10px; cursor: pointer;
+      color: var(--text-secondary); transition: all .2s; font-size: 14px;
+    }
+    .nav-sub-item:hover { background: var(--bg); color: var(--text); }
+    .nav-sub-item.active { background: rgba(175,82,222,.12); color: var(--purple); font-weight: 600; }
+    .nav-sub-count { font-size: 12px; opacity: .55; }
     .sidebar { background: #f6f6f8; }
     [data-theme="dark"] .sidebar { background: #202022; }
     .nav-user {
@@ -639,7 +662,11 @@
 
         <div class="nav-group-title">成长积累</div>
         <div class="nav-item" data-section="books" onclick="showSection('books')"><span class="nav-icon">📚</span>读书收获</div>
-        <div class="nav-item" data-section="entertainment" onclick="showSection('entertainment')"><span class="nav-icon">🎬</span>娱乐中心</div>
+        <div class="nav-folder" id="entFolder" onclick="toggleEntNav()">
+          <span style="display:flex;align-items:center;gap:12px;"><span class="nav-icon">🎬</span>娱乐中心</span>
+          <span class="ent-chevron" id="entChevron">›</span>
+        </div>
+        <div class="nav-sub" id="entSubNav" style="display:none;"></div>
         <div class="nav-item" data-section="english" onclick="showSection('english')"><span class="nav-icon">🔤</span>英语学习</div>
         <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="nav-icon">🎯</span>项目/目标</div>
 
@@ -1199,12 +1226,12 @@
       <section class="section" id="sec-entertainment">
         <div class="card">
           <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            🎬 娱乐中心
+            🎬 娱乐中心 <span style="font-size:15px;color:var(--text-secondary);">/ <span id="entCatName">电视剧</span></span>
             <button class="btn btn-blue" style="margin-left:auto;padding:5px 14px;font-size:13px;" onclick="syncEntertainment()">🔄 同步 Obsidian</button>
             <button class="btn btn-green" style="padding:5px 14px;font-size:13px;" onclick="openEntAdd()">➕ 添加作品</button>
           </div>
           <div id="entStats" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;"></div>
-          <div id="entTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+          <div id="entCatLabel" style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;"></div>
           <div id="entViewBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
           <div id="entLibBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 10px;align-items:center;"></div>
           <div id="entGenreBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
@@ -1555,6 +1582,9 @@
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       const nav = document.querySelector('.nav-item[data-section="' + id + '"]');
       if (nav) nav.classList.add('active');
+      const folder = document.getElementById('entFolder');
+      if (folder) folder.classList.toggle('active', id === 'entertainment');
+      if (id === 'entertainment') applyEntNav();
       if (window.innerWidth <= 768) toggleSidebar(false);
       try { localStorage.setItem('lifeOS_section', id); } catch (e) {}
       renderAll();
@@ -2440,6 +2470,7 @@
     let entGenre = '全部';              // 题材过滤（仅书籍分类）
     let calibreLibs = [];               // [{name,key,path,count}]
     let calibreLibsLoaded = false;
+    let entNavOpen = false;             // 侧边栏娱乐中心子菜单是否展开
     function libName(key) { const l = calibreLibs.find(x => x.key === key); return l ? l.name : key; }
 
     function renderEntertainment() {
@@ -2465,13 +2496,11 @@
           '<span class="pill" style="background:rgba(255,149,0,.15);color:var(--orange);">想追 ' + cnt('想追') + '</span>' +
           '<span class="pill" style="background:rgba(120,120,128,.15);color:var(--text-secondary);">未看 ' + cnt('未看') + '</span>';
       }
-      const tabs = document.getElementById('entTabs');
-      if (tabs) {
-        tabs.innerHTML = ENT_TYPES.map(t => {
-          const n = all.filter(e => e.type === t).length;
-          return `<div class="food-tab ${t === entCurrentTab ? 'active' : ''}" onclick="switchEntTab('${t}')">${t} <span style="opacity:.55;font-size:12px;">${n}</span></div>`;
-        }).join('');
-      }
+      const cn = document.getElementById('entCatName');
+      if (cn) cn.textContent = entCurrentTab;
+      const cl = document.getElementById('entCatLabel');
+      if (cl) cl.textContent = '当前分类：' + entCurrentTab;
+      renderEntSubNav();
       // 视图切换条（仅书籍）
       const vb = document.getElementById('entViewBar');
       if (vb) {
@@ -2534,6 +2563,40 @@
     function switchEntLib(key) { entCurrentLib = key; renderEntertainment(); }
     function switchEntView(v) { entView = v; renderEntertainment(); }
     function switchEntGenre(g) { entGenre = g; renderEntertainment(); }
+
+    // 侧边栏娱乐中心：展开/收起子菜单
+    function toggleEntNav() {
+      entNavOpen = !entNavOpen;
+      applyEntNav();
+      try { localStorage.setItem('lifeOS_entNavOpen', entNavOpen ? '1' : '0'); } catch (e) {}
+      // 展开时确保停留在娱乐中心页面
+      const sec = document.getElementById('sec-entertainment');
+      if (entNavOpen && sec && !sec.classList.contains('active')) showSection('entertainment');
+    }
+    function applyEntNav() {
+      const sub = document.getElementById('entSubNav');
+      const chev = document.getElementById('entChevron');
+      if (sub) sub.style.display = entNavOpen ? 'flex' : 'none';
+      if (chev) chev.classList.toggle('open', entNavOpen);
+    }
+    // 渲染侧边栏子菜单（7 个分类 + 数量）
+    function renderEntSubNav() {
+      const sub = document.getElementById('entSubNav');
+      if (!sub) return;
+      const all = data.entertainment || [];
+      sub.innerHTML = ENT_TYPES.map(t => {
+        const n = all.filter(e => e.type === t).length;
+        const active = (t === entCurrentTab) ? ' active' : '';
+        return `<div class="nav-sub-item${active}" onclick="selectEntCat('${t}')"><span>${t}</span><span class="nav-sub-count">${n}</span></div>`;
+      }).join('');
+    }
+    // 点击侧边栏子分类
+    function selectEntCat(t) {
+      entCurrentTab = t;
+      if (!entNavOpen) { entNavOpen = true; applyEntNav(); try { localStorage.setItem('lifeOS_entNavOpen', '1'); } catch (e) {} }
+      showSection('entertainment');
+      renderEntertainment();
+    }
     function syncCalibre(lib, silent) {
       if (lib === 'all') { foodToast('请选择具体书库再同步'); return; }
       const btn = document.getElementById('entSyncCalibreBtn');
@@ -2597,14 +2660,14 @@
       if (back) back.textContent = '← 返回' + entCurrentTab;
       const p = document.getElementById('entDetailPanel'); if (p) p.style.display = '';
       const g = document.getElementById('entGrid'); if (g) g.style.display = 'none';
-      const t = document.getElementById('entTabs'); if (t) t.style.display = 'none';
+      const cl = document.getElementById('entCatLabel'); if (cl) cl.style.display = 'none';
       const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = 'none';
       const b = document.getElementById('entDetailBody'); if (b) b.innerHTML = entDetailHtml(e);
     }
     function closeEntDetail() {
       const p = document.getElementById('entDetailPanel'); if (p) p.style.display = 'none';
       const g = document.getElementById('entGrid'); if (g) g.style.display = 'grid';
-      const t = document.getElementById('entTabs'); if (t) t.style.display = 'flex';
+      const cl = document.getElementById('entCatLabel'); if (cl) cl.style.display = '';
       const sb = document.getElementById('entSearchBar'); if (sb) sb.style.display = '';
     }
     function setEntStatus(id, st) {
@@ -3511,6 +3574,7 @@
       document.getElementById('greeting').textContent = (h < 11 ? '早上好' : h < 14 ? '中午好' : h < 19 ? '下午好' : '晚上好') + '，我';
       document.getElementById('dateText').textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
       renderAll();
+      try { if (localStorage.getItem('lifeOS_entNavOpen') === '1') { entNavOpen = true; applyEntNav(); } } catch (e) {}
       const empty = !data.todos.length && !data.books.length && !data.projects.length && !data.resources.length && !(data.food.recipes || []).length && !(data.finance.priceItems || []).length;
       if (!empty) {
         const b = document.getElementById('importObsidianBtn');
