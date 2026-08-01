@@ -8,6 +8,8 @@ uploads/
 
 # 本地 Obsidian vault 真实路径（含个人信息，不进仓库；server 优先读此文件）
 .vaultpath
+# 本地 Calibre 三书库路径配置（含本地路径，不进仓库；server 优先读此文件）
+.calibrelibraries
 
 # === 系统 / 临时 ===
 *.log

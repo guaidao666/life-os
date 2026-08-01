@@ -1204,6 +1204,7 @@
             <button class="btn btn-green" style="padding:5px 14px;font-size:13px;" onclick="openEntAdd()">➕ 添加作品</button>
           </div>
           <div id="entStats" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;"></div>
+          <div id="entLibBar" style="display:none;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center;"></div>
           <div id="entTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
           <div id="entSearchBar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
             <input class="input" id="entSearch" placeholder="🔍 搜索标题…" oninput="renderEntertainment()" style="max-width:260px;">
@@ -2431,12 +2432,21 @@
     const ENT_TYPES = ['电视剧','电影','动漫','漫画','书籍','游戏','音乐'];
     const ENT_STATUS = ['未看','想追','在看','看完'];
     let entCurrentTab = '电视剧';
+    let entCurrentLib = 'literature';   // 默认文学书库（按 key）
+    let calibreLibs = [];               // [{name,key,path,count}]
+    let calibreLibsLoaded = false;
+    let lastCalibreSync = {};           // 节流：每个库 60s 内不重复自动同步
+    function libName(key) { const l = calibreLibs.find(x => x.key === key); return l ? l.name : key; }
 
     function renderEntertainment() {
       const wrap = document.getElementById('entGrid');
       if (!wrap) return;
       const all = data.entertainment || [];
-      const list = all.filter(e => e.type === entCurrentTab);
+      if (!calibreLibsLoaded) { calibreLibsLoaded = true; loadCalibreLibs(); }
+      let list = all.filter(e => e.type === entCurrentTab);
+      if (entCurrentTab === '书籍' && entCurrentLib !== 'all') {
+        list = list.filter(e => e.library === entCurrentLib);
+      }
       const sc = document.getElementById('entStats');
       if (sc) {
         const cnt = (st) => list.filter(e => e.status === st).length;
@@ -2453,6 +2463,16 @@
           return `<div class="food-tab ${t === entCurrentTab ? 'active' : ''}" onclick="switchEntTab('${t}')">${t} <span style="opacity:.55;font-size:12px;">${n}</span></div>`;
         }).join('');
       }
+      const lb = document.getElementById('entLibBar');
+      if (lb) {
+        if (entCurrentTab === '书籍') {
+          lb.style.display = 'flex';
+          const opts = [{name:'全部(含Obsidian)', key:'all'}, ...calibreLibs.map(l => ({name:l.name, key:l.key}))];
+          lb.innerHTML = '<span style="font-size:12px;color:var(--text-secondary);">书库：</span>' + opts.map(o => `<div class="food-tab ${o.key === entCurrentLib ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick="switchEntLib('${o.key}')">${escapeHtml(o.name)}</div>`).join('') + `<button class="btn btn-blue" style="padding:3px 10px;font-size:12px;" onclick="syncCalibre('${entCurrentLib}')" id="entSyncCalibreBtn">🔄 同步当前书库</button>`;
+        } else {
+          lb.style.display = 'none';
+        }
+      }
       const q = (document.getElementById('entSearch').value || '').trim().toLowerCase();
       const filtered = q ? list.filter(e => (e.title || '').toLowerCase().includes(q)) : list;
       if (!filtered.length) {
@@ -2467,15 +2487,52 @@
           ? `<img src="${e.cover}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
           : `<div style="width:100%;height:120px;border-radius:10px;margin-bottom:8px;background:linear-gradient(135deg,rgba(175,82,222,.18),rgba(90,200,250,.18));display:flex;align-items:center;justify-content:center;font-size:34px;">🎬</div>`;
         return `<div class="book-card" onclick="showEnt(${e.id})" style="cursor:pointer;position:relative;">
+          ${e.library && e.library !== 'obsidian' ? `<span class="tag" style="position:absolute;top:6px;right:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;">📚 ${escapeHtml(libName(e.library))}</span>` : ''}
           ${cover}
           <div style="font-weight:700;font-size:15px;">${escapeHtml(e.title)}</div>
+          ${e.author ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${escapeHtml(e.author)}</div>` : ''}
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${stBadge}${rating}</div>
           ${e.tags && e.tags.length ? `<div style="margin-top:6px;">${e.tags.slice(0,3).map(t => `<span class="tag" style="font-size:11px;">${escapeHtml(t)}</span>`).join(' ')}</div>` : ''}
+          ${(e.formats && e.formats.length) ? `<div style="margin-top:6px;">${e.formats.slice(0,3).map(f => `<span class="tag" style="font-size:10px;">${escapeHtml(f)}</span>`).join(' ')}</div>` : ''}
         </div>`;
       }).join('');
     }
 
-    function switchEntTab(t) { entCurrentTab = t; renderEntertainment(); }
+    function switchEntTab(t) {
+      entCurrentTab = t;
+      renderEntertainment();
+      if (t === '书籍') autoSyncBooks();
+    }
+    function switchEntLib(key) { entCurrentLib = key; renderEntertainment(); if (key !== 'all') autoSyncBooks(); }
+    function autoSyncBooks() {
+      if (entCurrentLib === 'all') return;
+      const now = Date.now();
+      if (lastCalibreSync[entCurrentLib] && now - lastCalibreSync[entCurrentLib] < 60000) return;
+      lastCalibreSync[entCurrentLib] = now;
+      syncCalibre(entCurrentLib, true);
+    }
+    function syncCalibre(lib, silent) {
+      if (lib === 'all') { foodToast('请选择具体书库再同步'); return; }
+      const btn = document.getElementById('entSyncCalibreBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ 同步中…'; }
+      fetch('/api/sync-calibre', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ library: lib }) })
+        .then(r => r.json()).then(j => {
+          if (j.ok) {
+            loadData().then(() => { renderEntertainment(); if (!silent) foodToast('✅ ' + (j.name||lib) + ' 同步完成：新增 ' + j.inserted + ' / 更新 ' + j.updated + '，共 ' + j.total + ' 本'); });
+          } else { foodToast('❌ 同步失败：' + (j.error || '')); }
+        })
+        .catch(() => foodToast('❌ 同步出错'))
+        .finally(() => { if (btn) { btn.disabled = false; btn.textContent = '🔄 同步当前书库'; } });
+    }
+    function openCalibreFolder(id) {
+      fetch('/api/open-calibre-folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+        .then(r => r.json()).then(j => { if (!j.ok) foodToast('❌ 打开失败：' + (j.error || '')); });
+    }
+    function loadCalibreLibs() {
+      fetch('/api/calibre-libraries').then(r => r.json()).then(j => {
+        if (j.ok) { calibreLibs = j.libs || []; renderEntertainment(); }
+      }).catch(() => {});
+    }
 
     function entDetailHtml(e) {
       const sColor = ({'看完':'var(--green)','在看':'var(--blue)','想追':'var(--orange)','未看':'var(--text-secondary)'}[e.status] || '');
@@ -2486,6 +2543,17 @@
       html += `<div style="font-size:20px;font-weight:700;margin-bottom:6px;">🎬 ${escapeHtml(e.title)}</div>`;
       html += `<div style="color:var(--text-secondary);font-size:14px;margin-bottom:8px;">${escapeHtml(e.type)}${e.rating ? ' · ⭐ ' + e.rating : ''} · ${stBadge}</div>`;
       if (tags) html += `<div style="margin-bottom:10px;">${tags}</div>`;
+      if (e.type === '书籍') {
+        const fmt = (e.formats && e.formats.length) ? e.formats.join('/') : '';
+        const meta = [e.author && ('作者：' + e.author), e.publisher && ('出版社：' + e.publisher), fmt && ('格式：' + fmt)].filter(Boolean).join(' · ');
+        if (meta) html += `<div style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">${escapeHtml(meta)}</div>`;
+        if (e.calibreId) {
+          html += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <a class="btn btn-blue" href="calibre://show-book/${escapeHtml(e.library||'')}/${e.calibreId}" target="_blank" rel="noopener">📖 用 Calibre 打开</a>
+            <button class="btn" onclick="openCalibreFolder(${e.id})">📂 打开文件位置</button>
+          </div>`;
+        }
+      }
       if (e.url) html += `<div style="margin-bottom:10px;"><a class="btn btn-blue" href="${escapeHtml(e.url)}" target="_blank" rel="noopener">🔗 观看 / 资源</a></div>`;
       html += `<div style="margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><span style="font-size:13px;color:var(--text-secondary);">状态：</span>${ENT_STATUS.map(s => `<button class="btn ${e.status === s ? 'btn-green' : ''}" style="padding:3px 10px;font-size:12px;" onclick="setEntStatus(${e.id}, '${s}')">${s}</button>`).join('')}</div>`;
       if (e.plot) html += `<div style="font-weight:600;margin:12px 0 6px;">剧情简介</div><div style="line-height:1.8;">${escapeHtml(e.plot)}</div>`;

@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, copyFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -85,6 +85,13 @@ try { db.exec('ALTER TABLE recipes ADD COLUMN difficulty INTEGER DEFAULT 2'); } 
 try { db.exec('ALTER TABLE recipes ADD COLUMN ingredients TEXT DEFAULT \'[]\''); } catch (e) {}
 try { db.exec('ALTER TABLE recipes ADD COLUMN tags TEXT DEFAULT \'[]\''); } catch (e) {}
 try { db.exec('ALTER TABLE recipes ADD COLUMN image TEXT DEFAULT \'\''); } catch (e) {}
+// 迁移：entertainment 增加 Calibre 字段（作者/出版社/格式/calibre id/路径/书库名）
+try { db.exec('ALTER TABLE entertainment ADD COLUMN author TEXT'); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN publisher TEXT'); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN formats TEXT DEFAULT \'\''); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN calibre_id INTEGER'); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN calibre_path TEXT'); } catch (e) {}
+try { db.exec('ALTER TABLE entertainment ADD COLUMN library TEXT'); } catch (e) {}
 // 迁移：cook_posts / diet_logs → meals（合并饮食数据，type=cook 自己做 / eat_out 外食）
 try {
   db.exec(`INSERT INTO meals (id,date,meal,type,recipe_id,name,cal,images,feeling,rating)
@@ -165,8 +172,8 @@ function readData() {
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
 
-  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at FROM entertainment').all()
-    .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '' }));
+  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library FROM entertainment').all()
+    .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '', author: r.author || '', publisher: r.publisher || '', formats: r.formats ? safeParse(r.formats, []) : [], calibreId: r.calibre_id, calibrePath: r.calibre_path || '', library: r.library || '' }));
 
   const rewardLog = db.prepare('SELECT id,ts,source,text,dw,dsw,bw,bsw FROM reward_log ORDER BY ts DESC, id DESC LIMIT 50').all()
     .map(r => ({ id: r.id, ts: r.ts || '', source: r.source || '', text: r.text || '', dw: r.dw || 0, dsw: r.dsw || 0, bw: r.bw || 0, bsw: r.bsw || 0 }));
@@ -756,6 +763,84 @@ const server = http.createServer(async (req, res) => {
     return inserted;
   }
 
+  // ---- Calibre 书库配置（.calibrelibraries）----
+  function loadCalibreLibs() {
+    try {
+      const cfg = JSON.parse(readFileSync(path.join(__dirname, '.calibrelibraries'), 'utf8'));
+      if (Array.isArray(cfg)) return cfg;
+    } catch (e) {}
+    return [];
+  }
+
+  // ---- 从 Calibre metadata.db 增量同步到 entertainment（type=书籍）----
+  function parseCalibreLibrary(lib) {
+    const libPath = lib.path;
+    const libKey = lib.key || lib.name;
+    const metaPath = path.join(libPath, 'metadata.db');
+    if (!existsSync(metaPath)) throw new Error('未找到 metadata.db: ' + metaPath);
+    // 复制一份避免 Calibre 运行时锁库
+    const tmp = path.join(__dirname, 'tmp_calibre_' + libKey + '.db');
+    copyFileSync(metaPath, tmp);
+    let cdb;
+    try { cdb = new DatabaseSync(tmp); } catch (e) { throw new Error('打开 Calibre 库失败: ' + e.message); }
+    try {
+      const books = cdb.prepare('SELECT id, title, path FROM books ORDER BY id').all();
+      const insEnt = db.prepare('INSERT INTO entertainment (id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+      const updEnt = db.prepare('UPDATE entertainment SET status=?, rating=?, tags=?, author=?, publisher=?, formats=?, cover=?, calibre_id=?, calibre_path=?, library=? WHERE id=?');
+      let inserted = 0, updated = 0;
+      let nextId = (db.prepare('SELECT MAX(id) AS m FROM entertainment').get().m || 0) + 1;
+      db.exec('BEGIN');
+      for (const b of books) {
+        const id = b.id;
+        const title = (b.title || '').trim();
+        if (!title) continue;
+        const authors = cdb.prepare('SELECT a.name FROM authors a JOIN books_authors_link l ON l.author=a.id WHERE l.book=?').all(id).map(r => r.name);
+        const author = authors.join(', ');
+        const tagRows = cdb.prepare('SELECT t.name FROM tags t JOIN books_tags_link l ON l.tag=t.id WHERE l.book=?').all(id).map(r => r.name);
+        const tags = tagRows.filter(t => t !== 'txt'); // txt 标签不映射（按用户要求忽略）
+        let status = '未看';
+        const has = t => tags.includes(t);
+        if (has('已读')) status = '看完';
+        else if (has('在读') || has('追更')) status = '在看';
+        else if (has('搁置') || has('推荐阅读')) status = '想追';
+        else if (has('新书入库')) status = '未看';
+        const rt = cdb.prepare('SELECT r.rating FROM ratings r JOIN books_ratings_link l ON l.rating=r.id WHERE l.book=?').get(id);
+        const rating = rt && rt.rating ? (rt.rating / 2) : 0;
+        const cm = cdb.prepare('SELECT text FROM comments WHERE book=?').get(id);
+        const note = cm ? String(cm.text || '').slice(0, 2000) : '';
+        const fmts = cdb.prepare('SELECT DISTINCT format FROM data WHERE book=?').all(id).map(r => r.format);
+        const bookDir = path.join(libPath, ...String(b.path).split('/'));
+        const coverSrc = path.join(bookDir, 'cover.jpg');
+        let cover = '';
+        if (existsSync(coverSrc)) {
+          try {
+            const dir = path.join(__dirname, 'uploads/calibre', libKey);
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+            const dst = path.join(dir, id + '.jpg');
+            if (!existsSync(dst)) copyFileSync(coverSrc, dst);
+            cover = '/uploads/calibre/' + encodeURIComponent(libKey) + '/' + id + '.jpg';
+          } catch (e) { /* 封面复制失败不阻断 */ }
+        }
+        const calibrePath = String(b.path || '');
+        const exist = db.prepare('SELECT id FROM entertainment WHERE type=? AND library=? AND calibre_id=?').get('书籍', libKey, id);
+        if (exist) {
+          updEnt.run(status, rating, JSON.stringify(tags), author, '', JSON.stringify(fmts), cover, id, calibrePath, libKey, exist.id);
+          updated++;
+        } else {
+          const eid = nextId++;
+          insEnt.run(eid, '书籍', title, status, rating, JSON.stringify(tags), '', note, '', '', '', cover, new Date().toISOString(), author, '', JSON.stringify(fmts), id, calibrePath, libKey);
+          inserted++;
+        }
+      }
+      db.exec('COMMIT');
+      return { inserted, updated };
+    } finally {
+      try { db.exec('ROLLBACK'); } catch {}
+      try { cdb.close(); } catch {}
+      try { if (existsSync(tmp)) unlinkSync(tmp); } catch {}
+    }
+  }
+
   // 娱乐中心：从 Obsidian 增量同步（按 type+title 去重，已存在跳过）
   if (req.method === 'POST' && url === '/api/sync-entertainment') {
     try {
@@ -765,9 +850,74 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true, inserted, total }));
     } catch (e) {
       console.error('SYNC-ENT ERROR:', e && e.stack ? e.stack : e);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: String(e) }));
+  }
+  return;
+}
+
+  // Calibre 书库列表（含各库已同步本数）
+  if (req.method === 'GET' && url === '/api/calibre-libraries') {
+    try {
+      const libs = loadCalibreLibs().map(l => {
+        const key = l.key || l.name;
+        const count = db.prepare('SELECT COUNT(*) AS c FROM entertainment WHERE type=? AND library=?').get('书籍', key).c;
+        return { name: l.name, key, path: l.path, count };
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, libs }));
+    } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: String(e) }));
     }
+    return;
+  }
+
+  // Calibre 同步：按 library.key 增量同步指定书库
+  if (req.method === 'POST' && url === '/api/sync-calibre') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { library } = JSON.parse(body);
+        const libs = loadCalibreLibs();
+        const lib = libs.find(l => (l.key || l.name) === library);
+        if (!lib) throw new Error('未找到书库: ' + library);
+        const { inserted, updated } = parseCalibreLibrary(lib);
+        const total = db.prepare('SELECT COUNT(*) AS c FROM entertainment WHERE type=? AND library=?').get('书籍', lib.key || lib.name).c;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, library: lib.key || lib.name, name: lib.name, inserted, updated, total }));
+      } catch (e) {
+        console.error('SYNC-CALIBRE ERROR:', e && e.stack ? e.stack : e);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // 打开 Calibre 书籍所在文件夹（Windows 用 explorer，mac 用 open，linux 用 xdg-open）
+  if (req.method === 'POST' && url === '/api/open-calibre-folder') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { id } = JSON.parse(body);
+        const row = db.prepare('SELECT library, calibre_path FROM entertainment WHERE id=?').get(id);
+        if (!row || !row.calibre_path) throw new Error('未找到该书库路径');
+        const lib = loadCalibreLibs().find(l => (l.key || l.name) === row.library);
+        if (!lib) throw new Error('未找到书库配置');
+        const bookDir = path.join(lib.path, ...String(row.calibre_path).split('/'));
+        if (!existsSync(bookDir)) throw new Error('文件夹不存在: ' + bookDir);
+        const opener = process.platform === 'win32' ? 'explorer' : (process.platform === 'darwin' ? 'open' : 'xdg-open');
+        spawnSync(opener, [bookDir]);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(e) }));
+      }
+    });
     return;
   }
 
