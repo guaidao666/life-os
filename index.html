@@ -487,6 +487,13 @@
     .ent-callout .ic { font-size:16px; line-height:1.5; font-weight:600; color:var(--purple); }
     .ent-callout .tx { font-size:14px; line-height:1.6; color:#444; }
     .ent-img-ph { margin:14px 0; border:1px dashed var(--border); border-radius:10px; padding:18px; text-align:center; color:var(--text-tertiary); background:var(--bg); font-size:13px; }
+    .ent-booknote { max-height:62vh; overflow:auto; padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg); line-height:1.8; }
+    .ent-booknote h1 { font-size:20px; font-weight:600; margin:0 0 10px; padding-left:12px; border-left:4px solid var(--purple); }
+    .ent-booknote h2 { font-size:16px; font-weight:600; margin:16px 0 6px; padding-bottom:5px; border-bottom:1px solid var(--border); }
+    .ent-booknote h3 { font-size:14px; font-weight:600; margin:12px 0 5px; }
+    .ent-booknote p { margin:7px 0; }
+    .ent-booknote ul, .ent-booknote ol { padding-left:22px; margin:6px 0; }
+    .ent-booknote a { color:var(--purple); }
     .ent-fn-area { font-size:13px; color:var(--text-secondary); line-height:1.7; background:var(--bg); border-radius:8px; padding:10px 14px; margin-top:8px; }
     .ent-fn-area .fn-h { font-weight:600; margin-bottom:4px; color:var(--text); }
     .ent-fn-area sup { color:var(--purple); }
@@ -2613,7 +2620,7 @@
         if (isBook) {
           lb.style.display = 'flex';
           const opts = [{name:'全部(含Obsidian)', key:'all'}, ...calibreLibs.map(l => ({name:l.name, key:l.key}))];
-          lb.innerHTML = '<span style="font-size:12px;color:var(--text-secondary);">书库：</span>' + opts.map(o => `<div class="food-tab ${o.key === entCurrentLib ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick="switchEntLib('${o.key}')">${escapeHtml(o.name)}</div>`).join('') + `<button class="btn btn-blue" style="padding:3px 10px;font-size:12px;" onclick="syncCalibre('${entCurrentLib}')" id="entSyncCalibreBtn">🔄 同步当前书库</button>`;
+          lb.innerHTML = '<span style="font-size:12px;color:var(--text-secondary);">书库：</span>' + opts.map(o => `<div class="food-tab ${o.key === entCurrentLib ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick="switchEntLib('${o.key}')">${escapeHtml(o.name)}</div>`).join('') + `<button class="btn btn-blue" style="padding:3px 10px;font-size:12px;" onclick="syncCalibre('${entCurrentLib}')" id="entSyncCalibreBtn">🔄 同步当前书库</button>` + `<button class="btn" style="padding:3px 10px;font-size:12px;" onclick="syncBooknotes()" id="entSyncBooknotesBtn">📝 同步书摘</button>`;
         } else {
           lb.style.display = 'none';
         }
@@ -2916,6 +2923,17 @@
         .catch(() => foodToast('❌ 同步出错'))
         .finally(() => { if (btn) { btn.disabled = false; btn.textContent = '🔄 同步当前书库'; } });
     }
+    function syncBooknotes() {
+      const btn = document.getElementById('entSyncBooknotesBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ 同步中…'; }
+      fetch('/api/sync-booknotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.json()).then(j => {
+          if (j.ok) { loadData().then(() => { renderEntertainment(); foodToast('✅ 书摘同步完成：匹配 ' + j.matched + ' 本 / 新建 ' + j.created + ' 本，共 ' + j.total + ' 篇'); }); }
+          else { foodToast('❌ 同步失败：' + (j.error || '')); }
+        })
+        .catch(() => foodToast('❌ 同步出错'))
+        .finally(() => { if (btn) { btn.disabled = false; btn.textContent = '📝 同步书摘'; } });
+    }
     function openCalibreFolder(id) {
       fetch('/api/open-calibre-folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
         .then(r => r.json()).then(j => { if (!j.ok) foodToast('❌ 打开失败：' + (j.error || '')); });
@@ -2955,6 +2973,7 @@
       if (e.quotes) html += `<div style="font-weight:600;margin:12px 0 6px;">台词记录</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.quotes)}</div>`;
       if (e.review) html += `<div style="font-weight:600;margin:12px 0 6px;">观后感</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.review)}</div>`;
       if (e.note) html += `<div style="font-weight:600;margin:12px 0 6px;">备注 / 攻略</div><div style="line-height:1.8;white-space:pre-wrap;">${escapeHtml(e.note)}</div>`;
+      if (e.booknote) html += `<div style="font-weight:600;margin:14px 0 6px;">📖 书摘 / 读书笔记</div><div class="ent-booknote">${mdToHtml(e.booknote)}</div>`;
       return html;
     }
 

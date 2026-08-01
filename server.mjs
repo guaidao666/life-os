@@ -96,6 +96,8 @@ try { db.exec('ALTER TABLE entertainment ADD COLUMN library TEXT'); } catch (e) 
 try { db.exec('ALTER TABLE entertainment ADD COLUMN shelf INTEGER DEFAULT 0'); } catch (e) {}
 try { db.exec('ALTER TABLE entertainment ADD COLUMN bookshelf_at TEXT'); } catch (e) {}
 try { db.exec('ALTER TABLE entertainment ADD COLUMN last_read_at TEXT'); } catch (e) {}
+// 迁移：entertainment 增加书摘字段（Obsidian 书籍笔记融合到详情页）
+try { db.exec('ALTER TABLE entertainment ADD COLUMN booknote TEXT'); } catch (e) {}
 // 娱乐中心：Obsidian README 解析清单（分类分区 + 作品名 + 关联卡片）
 db.exec(`CREATE TABLE IF NOT EXISTS ent_readme_lists (
   id INTEGER PRIMARY KEY, type TEXT, section TEXT, title TEXT, note TEXT, linked_ent_id INTEGER DEFAULT 0
@@ -184,7 +186,7 @@ function readData() {
   const diary = db.prepare('SELECT id,date,title,content,mood,created_at FROM diary ORDER BY date DESC, id DESC').all()
     .map(r => ({ id: r.id, date: r.date || '', title: r.title || '', content: r.content || '', mood: r.mood || '', created_at: r.created_at || '' }));
 
-  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library,shelf,bookshelf_at,last_read_at FROM entertainment').all()
+  const entertainment = db.prepare('SELECT id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library,shelf,bookshelf_at,last_read_at,booknote FROM entertainment').all()
     .map(r => ({ id: r.id, type: r.type || '', title: r.title || '', status: r.status || '', rating: r.rating || 0, tags: r.tags ? safeParse(r.tags, []) : [], url: r.url || '', note: r.note || '', plot: r.plot || '', quotes: r.quotes || '', review: r.review || '', cover: r.cover || '', createdAt: r.created_at || '', author: r.author || '', publisher: r.publisher || '', formats: r.formats ? safeParse(r.formats, []) : [], calibreId: r.calibre_id, calibrePath: r.calibre_path || '', library: r.library || '', shelf: r.shelf ? 1 : 0, bookshelfAt: r.bookshelf_at || '', lastReadAt: r.last_read_at || '' }));
 
   const entReadmeLists = db.prepare('SELECT id,type,section,title,note,linked_ent_id FROM ent_readme_lists ORDER BY id').all()
@@ -782,6 +784,74 @@ const server = http.createServer(async (req, res) => {
     return inserted;
   }
 
+  // ---- 把 Obsidian 娱乐/书籍/*.md 书摘融合进 entertainment（匹配已有书→写入 booknote；无则新建）----
+  function syncBooknotes() {
+    const dir = path.join(VAULT, '娱乐/书籍');
+    if (!existsSync(dir)) return { matched: 0, created: 0, total: 0 };
+    const all = listMdRecursive(dir).filter(f => path.basename(f.name).toLowerCase() !== 'readme.md');
+    const topDir = dir.replace(/\\/g, '/');
+    const topFiles = all.filter(f => path.dirname(f.path).replace(/\\/g, '/') === topDir);
+    const books = db.prepare("SELECT id,title,author,publisher,cover,library FROM entertainment WHERE type='书籍'").all();
+    const norm = (t) => String(t || '').toLowerCase()
+      .replace(/[《》「」【】\[\]（）()：:，,、。.!！?？—\-·~～\s]/g, '')
+      .replace(/第.部|第一部|全\d+册|套装|完结版|独家首发|作者.*?力作|（.*?）|\(.*?\)/g, '')
+      .trim();
+    const clean = (raw) => {
+      const cm = raw.match(/<img[^>]+src=["']([^"']+)["']/i);
+      const cover = cm ? cm[1] : '';
+      let s = raw.replace(/<\/?center>/g, '').replace(/<\/?font[^>]*>/g, '')
+        .replace(/<br\s*\/?>/g, '\n').replace(/<img[^>]*>/g, '');
+      s = s.split(/\r?\n/).filter(l => l.trim() !== '---' && !/^《[^》]*》$/.test(l.trim())).join('\n');
+      s = s.replace(/\n{3,}/g, '\n\n').trim();
+      return { cover, text: s };
+    };
+    const matchBook = (inner, author) => {
+      let best = null, bestScore = 0;
+      for (const b of books) {
+        const nTitle = norm(b.title);
+        if (!nTitle) continue;
+        let score = 0;
+        if (nTitle === norm(inner)) score = 80;
+        else if (nTitle.includes(norm(inner)) || norm(inner).includes(nTitle)) score = 40;
+        if (score === 0) continue;
+        if (author && b.author && String(b.author).includes(author)) score += 40;
+        if (b.library) score += 10;
+        if (score > bestScore) { bestScore = score; best = b; }
+      }
+      return bestScore > 0 ? best : null;
+    };
+    const updBook = db.prepare('UPDATE entertainment SET booknote=?, cover=COALESCE(NULLIF(cover,\'\'),?), author=COALESCE(NULLIF(author,\'\'),?), publisher=COALESCE(NULLIF(publisher,\'\'),?) WHERE id=?');
+    const insBook = db.prepare('INSERT INTO entertainment (id,type,title,status,rating,tags,url,note,plot,quotes,review,cover,created_at,author,publisher,formats,calibre_id,calibre_path,library,booknote) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    let nextId = (db.prepare('SELECT MAX(id) AS m FROM entertainment').get().m || 0) + 1;
+    let matched = 0, created = 0;
+    db.exec('BEGIN');
+    try {
+      for (const f of topFiles) {
+        const raw = readMdSafe(f.path);
+        if (!raw.trim()) continue;
+        const { cover, text } = clean(raw);
+        const innerM = raw.match(/<font[^>]*>《([^》]+)》/);
+        const inner = innerM ? innerM[1].trim() : path.basename(f.name).replace(/\.md$/, '');
+        const authM = raw.match(/作者[：:]\s*([^\n<]+)/);
+        const author = authM ? authM[1].replace(/<[^>]+>/g, '').trim() : '';
+        const pubM = raw.match(/出版社[：:]\s*([^\n<]+)/);
+        const publisher = pubM ? pubM[1].replace(/<[^>]+>/g, '').trim() : '';
+        const newTitle = path.basename(f.name).replace(/\.md$/, '');
+        const mb = matchBook(inner, author);
+        if (mb) {
+          updBook.run(text, cover, author, publisher, mb.id);
+          matched++;
+        } else {
+          insBook.run(nextId, '书籍', newTitle, '看完', 0, '[]', '', '', '', '', '', cover, new Date().toISOString(), author, publisher, '', null, '', 'obsidian', text);
+          nextId++;
+          created++;
+        }
+      }
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    return { matched, created, total: matched + created };
+  }
+
   // ---- 解析 Obsidian 娱乐分类 README：分区清单 + 原始 Markdown ----
   function parseEntertainmentReadmes() {
     const entDir = path.join(VAULT, '娱乐');
@@ -927,11 +997,25 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true, inserted, readmeItems, total }));
     } catch (e) {
       console.error('SYNC-ENT ERROR:', e && e.stack ? e.stack : e);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: String(e) }));
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
   }
-  return;
-}
+
+  // 娱乐中心：把 Obsidian 书籍书摘融合进书籍详情页（匹配已有书→写入 booknote；无则新建）
+  if (req.method === 'POST' && url === '/api/sync-booknotes') {
+    try {
+      const r = syncBooknotes();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...r }));
+    } catch (e) {
+      console.error('SYNC-BOOKNOTES ERROR:', e && e.stack ? e.stack : e);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
+  }
 
   // Calibre 书库列表（含各库已同步本数）
   if (req.method === 'GET' && url === '/api/calibre-libraries') {
